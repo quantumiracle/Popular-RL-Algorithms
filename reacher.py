@@ -73,7 +73,7 @@ class Reacher:
             pygame.draw.circle(self.screen, (255, 255, 0), np.array(self.target_pos).astype(int), 10) # draw target
             # Flip the display buffers to show the current rendering
             pygame.display.flip()
-            time.sleep(0.5)
+            # time.sleep(0.5)
 
             ''' screenshot the image '''
             # pygame.image.save(self.screen, './screen.png')
@@ -139,9 +139,9 @@ class Reacher:
             reward_0=100.0
             reward = reward_0 / (np.sqrt((pos_set[-2]-self.target_pos[0])**2+(pos_set[-1]-self.target_pos[1])**2)+1)
         if screen_shot: 
-            return screenshot, np.array(reward), np.array(0), distance2goal
+            return screenshot, reward, 0, distance2goal
         else: 
-            return np.array(np.concatenate((pos_set,self.target_pos))), np.array(reward), np.array(0), distance2goal
+            return np.array(np.concatenate((pos_set,self.target_pos))), reward, 0, distance2goal
 
 
 if __name__ == "__main__":

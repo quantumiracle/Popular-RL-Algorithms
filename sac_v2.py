@@ -208,64 +208,108 @@ class PolicyNetwork(nn.Module):
     def sample_action(self,):
         a=torch.FloatTensor(self.num_actions).uniform_(-1, 1)
         return self.action_range*a
+class SAC_Trainer():
+    def __init__(self, replay_buffer, hidden_dim):
+        self.replay_buffer = replay_buffer
 
-def update(batch_size,gamma=0.99,soft_tau=1e-2,):
-    alpha = 0.0  # trade-off between exploration (max entropy) and exploitation (max Q) 
+
+        self.soft_q_net1 = SoftQNetwork(state_dim, action_dim, hidden_dim).to(device)
+        self.soft_q_net2 = SoftQNetwork(state_dim, action_dim, hidden_dim).to(device)
+        self.target_soft_q_net1 = SoftQNetwork(state_dim, action_dim, hidden_dim).to(device)
+        self.target_soft_q_net2 = SoftQNetwork(state_dim, action_dim, hidden_dim).to(device)
+        self.policy_net = PolicyNetwork(state_dim, action_dim, hidden_dim).to(device)
+        self.alpha = torch.zeros(1, dtype=torch.float32, requires_grad=True, device=device)
+        print('Soft Q Network (1,2): ', self.soft_q_net1)
+        print('Policy Network: ', self.policy_net)
+
+        for target_param, param in zip(self.target_soft_q_net1.parameters(), self.soft_q_net1.parameters()):
+            target_param.data.copy_(param.data)
+        for target_param, param in zip(self.target_soft_q_net2.parameters(), self.soft_q_net2.parameters()):
+            target_param.data.copy_(param.data)
+
+        self.soft_q_criterion1 = nn.MSELoss()
+        self.soft_q_criterion2 = nn.MSELoss()
+
+        soft_q_lr = 3e-4
+        policy_lr = 3e-4
+        alpha_lr  = 3e-4
+
+        self.soft_q_optimizer1 = optim.Adam(self.soft_q_net1.parameters(), lr=soft_q_lr)
+        self.soft_q_optimizer2 = optim.Adam(self.soft_q_net2.parameters(), lr=soft_q_lr)
+        self.policy_optimizer = optim.Adam(self.policy_net.parameters(), lr=policy_lr)
+        self.alpha_optimizer = optim.Adam([self.alpha], lr=alpha_lr)
+
     
-    state, action, reward, next_state, done = replay_buffer.sample(batch_size)
-    # print('sample:', state, action,  reward, done)
+    def update(self, batch_size, auto_entropy=True, target_entropy=-2, gamma=0.99,soft_tau=1e-2):
+        state, action, reward, next_state, done = self.replay_buffer.sample(batch_size)
+        # print('sample:', state, action,  reward, done)
 
-    state      = torch.FloatTensor(state).to(device)
-    next_state = torch.FloatTensor(next_state).to(device)
-    action     = torch.FloatTensor(action).to(device)
-    reward     = torch.FloatTensor(reward).unsqueeze(1).to(device)  # reward is single value, unsqueeze() to add one dim to be [reward] at the sample dim;
-    done       = torch.FloatTensor(np.float32(done)).unsqueeze(1).to(device)
+        state      = torch.FloatTensor(state).to(device)
+        next_state = torch.FloatTensor(next_state).to(device)
+        action     = torch.FloatTensor(action).to(device)
+        reward     = torch.FloatTensor(reward).unsqueeze(1).to(device)  # reward is single value, unsqueeze() to add one dim to be [reward] at the sample dim;
+        done       = torch.FloatTensor(np.float32(done)).unsqueeze(1).to(device)
 
-    predicted_q_value1 = soft_q_net1(state, action)
-    predicted_q_value2 = soft_q_net2(state, action)
-    new_action, log_prob, epsilon, mean, log_std = policy_net.evaluate(state)
-    new_next_action, next_log_prob, _, _, _ = policy_net.evaluate(next_state)
+        predicted_q_value1 = self.soft_q_net1(state, action)
+        predicted_q_value2 = self.soft_q_net2(state, action)
+        new_action, log_prob, epsilon, mean, log_std = self.policy_net.evaluate(state)
+        new_next_action, next_log_prob, _, _, _ = self.policy_net.evaluate(next_state)
 
-    reward = (reward - reward.mean(dim=0)) /reward.std(dim=0) # normalize with batch mean and std
-# Training Q Function
-    target_q_min = torch.min(target_soft_q_net1(next_state, new_next_action),target_soft_q_net2(next_state, new_next_action)) - alpha * next_log_prob
-    target_q_value = reward + (1 - done) * gamma * target_q_min # if done==1, only reward
-    # print('r: ', reward)
-    print('pre q 1: ', predicted_q_value1[0] )
-    print('t q : ', target_q_value[0])
-    q_value_loss1 = soft_q_criterion1(predicted_q_value1, target_q_value.detach())  # detach: no gradients for the variable
-    q_value_loss2 = soft_q_criterion2(predicted_q_value2, target_q_value.detach())
+        reward = (reward - reward.mean(dim=0)) /reward.std(dim=0) # normalize with batch mean and std
+    # Updating alpha wrt entropy
+        # alpha = 0.0  # trade-off between exploration (max entropy) and exploitation (max Q) 
+        if auto_entropy is True:
+            alpha_loss = -(self.alpha * (log_prob + target_entropy).detach()).mean()
+            print('alpha loss: ',alpha_loss)
+            self.alpha_optimizer.zero_grad()
+            alpha_loss.backward()
+            self.alpha_optimizer.step()
+        else:
+            self.alpha = 1.
+            alpha_loss = 0
+        print('alpha: ',self.alpha)
 
-
-    soft_q_optimizer1.zero_grad()
-    q_value_loss1.backward()
-    soft_q_optimizer1.step()
-    soft_q_optimizer2.zero_grad()
-    q_value_loss2.backward()
-    soft_q_optimizer2.step()  
-
-# Training Policy Function
-    predicted_new_q_value = torch.min(soft_q_net1(state, new_action),soft_q_net2(state, new_action))
-    policy_loss = (alpha * log_prob - predicted_new_q_value).mean()
-
-    policy_optimizer.zero_grad()
-    policy_loss.backward()
-    policy_optimizer.step()
-    
-    print('q loss: ', q_value_loss1, q_value_loss2)
-    print('policy loss: ', policy_loss )
+    # Training Q Function
+        target_q_min = torch.min(self.target_soft_q_net1(next_state, new_next_action),self.target_soft_q_net2(next_state, new_next_action)) - self.alpha * next_log_prob
+        target_q_value = reward + (1 - done) * gamma * target_q_min # if done==1, only reward
+        # print('r: ', reward)
+        print('pre q 1: ', predicted_q_value1[0] )
+        print('t q : ', target_q_value[0])
+        q_value_loss1 = self.soft_q_criterion1(predicted_q_value1, target_q_value.detach())  # detach: no gradients for the variable
+        q_value_loss2 = self.soft_q_criterion2(predicted_q_value2, target_q_value.detach())
 
 
-# Soft update the target value net
-    for target_param, param in zip(target_soft_q_net1.parameters(), soft_q_net1.parameters()):
-        target_param.data.copy_(  # copy data value into target parameters
-            target_param.data * (1.0 - soft_tau) + param.data * soft_tau
-        )
-    for target_param, param in zip(target_soft_q_net2.parameters(), soft_q_net2.parameters()):
-        target_param.data.copy_(  # copy data value into target parameters
-            target_param.data * (1.0 - soft_tau) + param.data * soft_tau
-        )
-    return predicted_new_q_value.mean()
+        self.soft_q_optimizer1.zero_grad()
+        q_value_loss1.backward()
+        self.soft_q_optimizer1.step()
+        self.soft_q_optimizer2.zero_grad()
+        q_value_loss2.backward()
+        self.soft_q_optimizer2.step()  
+
+    # Training Policy Function
+        predicted_new_q_value = torch.min(self.soft_q_net1(state, new_action),self.soft_q_net2(state, new_action))
+        policy_loss = (self.alpha * log_prob - predicted_new_q_value).mean()
+
+        self.policy_optimizer.zero_grad()
+        policy_loss.backward()
+        self.policy_optimizer.step()
+        
+        print('q loss: ', q_value_loss1, q_value_loss2)
+        print('policy loss: ', policy_loss )
+
+
+    # Soft update the target value net
+        for target_param, param in zip(self.target_soft_q_net1.parameters(), self.soft_q_net1.parameters()):
+            target_param.data.copy_(  # copy data value into target parameters
+                target_param.data * (1.0 - soft_tau) + param.data * soft_tau
+            )
+        for target_param, param in zip(self.target_soft_q_net2.parameters(), self.soft_q_net2.parameters()):
+            target_param.data.copy_(  # copy data value into target parameters
+                target_param.data * (1.0 - soft_tau) + param.data * soft_tau
+            )
+        return predicted_new_q_value.mean()
+
+
 
 # intialization
 # NUM_JOINTS=4
@@ -277,39 +321,14 @@ INI_JOING_ANGLES=[0.1, 0.1]
 SCREEN_SIZE=1000
 SPARSE_REWARD=False
 SCREEN_SHOT=False
+AUTO_ENTROPY=True
 env=Reacher(screen_size=SCREEN_SIZE, num_joints=NUM_JOINTS, link_lengths = LINK_LENGTH, \
 ini_joint_angles=INI_JOING_ANGLES, target_pos = [669,430], render=True)
 action_dim = env.num_actions
 state_dim  = env.num_observations
 hidden_dim = 512
 
-# value_net        = ValueNetwork(state_dim, hidden_dim).to(device)
-# target_value_net = ValueNetwork(state_dim, hidden_dim).to(device)
 
-soft_q_net1 = SoftQNetwork(state_dim, action_dim, hidden_dim).to(device)
-soft_q_net2 = SoftQNetwork(state_dim, action_dim, hidden_dim).to(device)
-target_soft_q_net1 = SoftQNetwork(state_dim, action_dim, hidden_dim).to(device)
-target_soft_q_net2 = SoftQNetwork(state_dim, action_dim, hidden_dim).to(device)
-policy_net = PolicyNetwork(state_dim, action_dim, hidden_dim).to(device)
-
-print('Soft Q Network (1,2): ', soft_q_net1)
-print('Policy Network: ', policy_net)
-
-for target_param, param in zip(target_soft_q_net1.parameters(), soft_q_net1.parameters()):
-    target_param.data.copy_(param.data)
-for target_param, param in zip(target_soft_q_net2.parameters(), soft_q_net2.parameters()):
-    target_param.data.copy_(param.data)
-
-soft_q_criterion1 = nn.MSELoss()
-soft_q_criterion2 = nn.MSELoss()
-
-value_lr  = 3e-4
-soft_q_lr = 3e-4
-policy_lr = 3e-4
-
-soft_q_optimizer1 = optim.Adam(soft_q_net1.parameters(), lr=soft_q_lr)
-soft_q_optimizer2 = optim.Adam(soft_q_net2.parameters(), lr=soft_q_lr)
-policy_optimizer = optim.Adam(policy_net.parameters(), lr=policy_lr)
 
 
 replay_buffer_size = 1e6
@@ -325,6 +344,7 @@ explore_steps = 200
 rewards     = []
 predict_qs  = []
 NORM_OBS=True
+sac_trainer=SAC_Trainer(replay_buffer, hidden_dim=hidden_dim )
 
 # training loop
 while frame_idx < max_frames:
@@ -337,10 +357,10 @@ while frame_idx < max_frames:
     
     for step in range(max_steps):
         if frame_idx > explore_steps:
-            action = policy_net.get_action(state).detach()
-        # action = policy_net.get_action(state)
+            action = sac_trainer.policy_net.get_action(state).detach()
+        # action = sac_trainer.policy_net.get_action(state)
         else:
-            action = policy_net.sample_action()
+            action = sac_trainer.policy_net.sample_action()
         print('action: ', action)
         next_state, reward, done, _ = env.step(action.numpy(), SPARSE_REWARD, SCREEN_SHOT)
         if NORM_OBS:
@@ -353,7 +373,7 @@ while frame_idx < max_frames:
         print(frame_idx)
         
         if len(replay_buffer) > batch_size:
-            predict_q=update(batch_size)
+            predict_q=sac_trainer.update(batch_size, auto_entropy=AUTO_ENTROPY, target_entropy=-1.*action_dim)
             print('update')
         
         if frame_idx % batch_size == 0:

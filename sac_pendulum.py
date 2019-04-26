@@ -184,7 +184,7 @@ def update(batch_size,gamma=0.99,soft_tau=1e-2,):
     target_q_value = reward + (1 - done) * gamma * target_value
     q_value_loss1 = soft_q_criterion1(predicted_q_value1, target_q_value.detach())
     q_value_loss2 = soft_q_criterion2(predicted_q_value2, target_q_value.detach())
-
+    print('pre q 1: ', predicted_q_value1[0] )
 
     soft_q_optimizer1.zero_grad()
     q_value_loss1.backward()
@@ -210,7 +210,7 @@ def update(batch_size,gamma=0.99,soft_tau=1e-2,):
     policy_optimizer.zero_grad()
     policy_loss.backward()
     policy_optimizer.step()
-    
+    print('reward: ', reward)
     print('value_loss: ', value_loss)
     print('q loss: ', q_value_loss1, q_value_loss2)
     print('policy loss: ', policy_loss )
@@ -258,7 +258,7 @@ policy_optimizer = optim.Adam(policy_net.parameters(), lr=policy_lr)
 replay_buffer_size = 1000000
 replay_buffer = ReplayBuffer(replay_buffer_size)
 
-max_frames  = 40000
+max_frames  = 150000
 max_steps   = 150
 frame_idx   = 0
 rewards     = []
@@ -299,3 +299,33 @@ while frame_idx < max_frames:
     rewards.append(episode_reward)
     predict_qs.append(predict_q)
 
+def display_frames_as_gif(frames):
+    """
+    Displays a list of frames as a gif, with controls
+    """
+    #plt.figure(figsize=(frames[0].shape[1] / 72.0, frames[0].shape[0] / 72.0), dpi = 72)
+    patch = plt.imshow(frames[0])
+    plt.axis('off')
+
+    def animate(i):
+        patch.set_data(frames[i])
+
+    anim = animation.FuncAnimation(plt.gcf(), animate, frames = len(frames), interval=50)
+    display(anim)
+
+
+env = gym.make("Pendulum-v0")
+
+# Run a demo of the environment
+state = env.reset()
+cum_reward = 0
+frames = []
+for t in range(50000):
+    # Render into buffer. 
+    frames.append(env.render(mode = 'rgb_array'))
+    action = policy_net.get_action(state)
+    state, reward, done, info = env.step(action.detach())
+    if done:
+        break
+env.close()
+display_frames_as_gif(frames)

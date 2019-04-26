@@ -248,8 +248,8 @@ def Update( tuples, rewards, gamma=0.99):
         rewards_.insert(0, R)
     rewards_ = torch.tensor(rewards_).to(device)
     rewards_ = (rewards_ - rewards_.mean()) / (rewards_.std() + eps)
-    print('rewards: ', rewards)
-    print('rewards_: ', rewards_)
+    # print('rewards: ', rewards)
+    # print('rewards_: ', rewards_)
     for (log_prob, value), r in zip(tuples, rewards_):
         value_losses.append(F.smooth_l1_loss(value, torch.tensor([r]).to(device)))
         reward = r - value.detach().item() # value gradients flow only through the critic
@@ -311,6 +311,7 @@ SPARSE_REWARD=False
 SCREEN_SHOT=False
 NORM_OBS=True
 ON_POLICY=True
+UPDATE=['Approach0', 'Approach1'][0]
 env=Reacher(screen_size=SCREEN_SIZE, num_joints=NUM_JOINTS, link_lengths = LINK_LENGTH, \
 ini_joint_angles=INI_JOING_ANGLES, target_pos = [669,430], render=True)
 action_dim = env.num_actions
@@ -351,8 +352,10 @@ def train():
                 state_value = critic_net(state)
                 next_state, reward, done, _ = env.step(action, SPARSE_REWARD, SCREEN_SHOT)
                 next_state_value = critic_net(next_state)
-                # SavedSet.append(SavedTuple(log_prob, state_value))
-                SavedSet.append(SavedTuple2(log_prob, state_value, next_state_value))
+                if UPDATE == 'Approach0':
+                    SavedSet.append(SavedTuple(log_prob, state_value))
+                if UPDATE == 'Approach1':
+                    SavedSet.append(SavedTuple2(log_prob, state_value, next_state_value))
                 if NORM_OBS:
                     next_state=state/SCREEN_SIZE
                 rewards.append(reward)
@@ -368,8 +371,10 @@ def train():
             if done:
                 break
         episode_rewards.append(episode_reward)
-        # Update(SavedSet, rewards)
-        Update2(SavedSet, rewards)
+        if UPDATE == 'Approach0':
+            Update(SavedSet, rewards)
+        if UPDATE == 'Approach1':
+            Update2(SavedSet, rewards)
 
 def main():
     train()

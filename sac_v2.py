@@ -1,6 +1,6 @@
 '''
-Soft Actor-Critic version 1
-using state value function: 1 V net, 1 target V net, 2 Q net, 1 policy net
+Soft Actor-Critic version 2
+using target Q instead of V net: 2 Q net, 2 target Q net, 1 policy net
 '''
 
 
@@ -223,15 +223,14 @@ def update(batch_size,gamma=0.99,soft_tau=1e-2,):
 
     predicted_q_value1 = soft_q_net1(state, action)
     predicted_q_value2 = soft_q_net2(state, action)
-    predicted_value    = value_net(state)
     new_action, log_prob, epsilon, mean, log_std = policy_net.evaluate(state)
+    new_next_action, next_log_prob, _, _, _ = policy_net.evaluate(next_state)
 
     reward = (reward - reward.mean(dim=0)) /reward.std(dim=0) # normalize with batch mean and std
 # Training Q Function
-    target_value = target_value_net(next_state)
-    target_q_value = reward + (1 - done) * gamma * target_value # if done==1, only reward
+    target_q_min = torch.min(target_soft_q_net1(next_state, new_next_action),target_soft_q_net2(next_state, new_next_action)) - alpha * next_log_prob
+    target_q_value = reward + (1 - done) * gamma * target_q_min # if done==1, only reward
     # print('r: ', reward)
-    print('tar v: ', target_value[0])
     print('pre q 1: ', predicted_q_value1[0] )
     print('t q : ', target_q_value[0])
     q_value_loss1 = soft_q_criterion1(predicted_q_value1, target_q_value.detach())  # detach: no gradients for the variable
@@ -245,37 +244,24 @@ def update(batch_size,gamma=0.99,soft_tau=1e-2,):
     q_value_loss2.backward()
     soft_q_optimizer2.step()  
 
-# Training Value Function
-    predicted_new_q_value = torch.min(soft_q_net1(state, new_action),soft_q_net2(state, new_action))
-    target_value_func = predicted_new_q_value - alpha * log_prob # for stochastic training, it equals to expectation over action
-    print('pre v: ', predicted_value[0])
-    # print('pre n q: ', predicted_new_q_value)
-    # print('log p: ', log_prob)
-    print('t v: ', target_value_func[0])
-    value_loss = value_criterion(predicted_value, target_value_func.detach())
-
-    
-    value_optimizer.zero_grad()
-    value_loss.backward()
-    value_optimizer.step()
-
 # Training Policy Function
+    predicted_new_q_value = torch.min(soft_q_net1(state, new_action),soft_q_net2(state, new_action))
     policy_loss = (alpha * log_prob - predicted_new_q_value).mean()
-    # policy_loss = (alpha * log_prob - soft_q_net1(state, new_action)).mean()  # Openai Spinning Up implementation
-    # policy_loss = (alpha * log_prob - (predicted_new_q_value - predicted_value.detach())).mean() # max Advantage instead of Q to prevent the Q-value drifted high
-
 
     policy_optimizer.zero_grad()
     policy_loss.backward()
     policy_optimizer.step()
     
-    print('value_loss: ', value_loss)
     print('q loss: ', q_value_loss1, q_value_loss2)
     print('policy loss: ', policy_loss )
 
 
 # Soft update the target value net
-    for target_param, param in zip(target_value_net.parameters(), value_net.parameters()):
+    for target_param, param in zip(target_soft_q_net1.parameters(), soft_q_net1.parameters()):
+        target_param.data.copy_(  # copy data value into target parameters
+            target_param.data * (1.0 - soft_tau) + param.data * soft_tau
+        )
+    for target_param, param in zip(target_soft_q_net2.parameters(), soft_q_net2.parameters()):
         target_param.data.copy_(  # copy data value into target parameters
             target_param.data * (1.0 - soft_tau) + param.data * soft_tau
         )
@@ -297,22 +283,23 @@ action_dim = env.num_actions
 state_dim  = env.num_observations
 hidden_dim = 512
 
-value_net        = ValueNetwork(state_dim, hidden_dim).to(device)
-target_value_net = ValueNetwork(state_dim, hidden_dim).to(device)
+# value_net        = ValueNetwork(state_dim, hidden_dim).to(device)
+# target_value_net = ValueNetwork(state_dim, hidden_dim).to(device)
 
 soft_q_net1 = SoftQNetwork(state_dim, action_dim, hidden_dim).to(device)
 soft_q_net2 = SoftQNetwork(state_dim, action_dim, hidden_dim).to(device)
+target_soft_q_net1 = SoftQNetwork(state_dim, action_dim, hidden_dim).to(device)
+target_soft_q_net2 = SoftQNetwork(state_dim, action_dim, hidden_dim).to(device)
 policy_net = PolicyNetwork(state_dim, action_dim, hidden_dim).to(device)
 
-print('(Target) Value Network: ', value_net)
 print('Soft Q Network (1,2): ', soft_q_net1)
 print('Policy Network: ', policy_net)
 
-for target_param, param in zip(target_value_net.parameters(), value_net.parameters()):
+for target_param, param in zip(target_soft_q_net1.parameters(), soft_q_net1.parameters()):
     target_param.data.copy_(param.data)
-    
+for target_param, param in zip(target_soft_q_net2.parameters(), soft_q_net2.parameters()):
+    target_param.data.copy_(param.data)
 
-value_criterion  = nn.MSELoss()
 soft_q_criterion1 = nn.MSELoss()
 soft_q_criterion2 = nn.MSELoss()
 
@@ -320,7 +307,6 @@ value_lr  = 3e-4
 soft_q_lr = 3e-4
 policy_lr = 3e-4
 
-value_optimizer  = optim.Adam(value_net.parameters(), lr=value_lr)
 soft_q_optimizer1 = optim.Adam(soft_q_net1.parameters(), lr=soft_q_lr)
 soft_q_optimizer2 = optim.Adam(soft_q_net2.parameters(), lr=soft_q_lr)
 policy_optimizer = optim.Adam(policy_net.parameters(), lr=policy_lr)

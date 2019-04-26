@@ -135,7 +135,7 @@ class Reacher:
             else:
                 reward = -1
         
-        else:    
+        else:  # dense reward  
             reward_0=100.0
             reward = reward_0 / (np.sqrt((pos_set[-2]-self.target_pos[0])**2+(pos_set[-1]-self.target_pos[1])**2)+1)
         if screen_shot: 

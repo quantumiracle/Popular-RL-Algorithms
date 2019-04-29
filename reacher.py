@@ -86,7 +86,7 @@ class Reacher:
             
         else:
             pass
-        return p.reshape(-1), np.array([downsampled_array_screen])
+        return np.array(int_coordinates).reshape(-1), np.array([downsampled_array_screen])
     
     def reset(self, screen_shot):
         ''' reset the environment '''
@@ -114,7 +114,7 @@ class Reacher:
         else:
             return np.array(np.concatenate((pos_set,self.target_pos)))
 
-    def step(self,action, sparse_reward, screen_shot):    
+    def step(self, action, sparse_reward, screen_shot):    
         # Get events and check if the user has closed the window
         if self.render == True:
             for event in pygame.event.get():
@@ -129,6 +129,7 @@ class Reacher:
 
         pos_set, screenshot=self.draw_current_state()
         distance2goal = np.sqrt((pos_set[-2]-self.target_pos[0])**2+(pos_set[-1]-self.target_pos[1])**2)
+        # print(distance2goal, pos_set[-2], pos_set[-1], self.target_pos[0], self.target_pos[1])
         if sparse_reward:
             if distance2goal < self.L:
                 reward = 20
@@ -138,6 +139,7 @@ class Reacher:
         else:  # dense reward  
             reward_0=100.0
             reward = reward_0 / (np.sqrt((pos_set[-2]-self.target_pos[0])**2+(pos_set[-1]-self.target_pos[1])**2)+1)
+            # reward = -np.sqrt((pos_set[-2]-self.target_pos[0])**2+(pos_set[-1]-self.target_pos[1])**2)
         if screen_shot: 
             return screenshot, reward, 0, distance2goal
         else: 
@@ -149,10 +151,13 @@ if __name__ == "__main__":
 
     num_episodes=500
     num_steps=20
-    action_range=5.0
-    NUM_JOINTS=4
-    LINK_LENGTH=[200, 140, 80, 50]
-    INI_JOING_ANGLES=[0.1, 0.1, 0.1, 0.1]
+    action_range=20.0
+    # NUM_JOINTS=4
+    # LINK_LENGTH=[200, 140, 80, 50]
+    # INI_JOING_ANGLES=[0.1, 0.1, 0.1, 0.1]
+    NUM_JOINTS=2
+    LINK_LENGTH=[200, 140]
+    INI_JOING_ANGLES=[0.1, 0.1]
     SPARSE_REWARD=False
     SCREEN_SHOT=False
 
@@ -169,9 +174,10 @@ if __name__ == "__main__":
         reacher.reset(SCREEN_SHOT)
         while step<num_steps:
             step+=1
-            action=np.random.uniform(-action_range,action_range,size=NUM_JOINTS)
-            re=reacher.step([action], SPARSE_REWARD, SCREEN_SHOT)
-            print(re)
+            # action=np.random.uniform(-action_range,action_range,size=NUM_JOINTS)
+            action=[9,0]
+            state, re, _, _ =reacher.step(action, SPARSE_REWARD, SCREEN_SHOT)
+            print(state, re)
 
 
 

@@ -14,6 +14,7 @@ from IPython.display import clear_output
 import matplotlib.pyplot as plt
 from matplotlib import animation
 from IPython.display import display
+from reacher import Reacher
 
 
 use_cuda = torch.cuda.is_available()
@@ -145,6 +146,7 @@ class PolicyNetwork(nn.Module):
         z      = normal.sample()
         action = torch.tanh(mean+ std*z.to(device))
         log_prob = Normal(mean, std).log_prob(mean+ std*z.to(device)) - torch.log(1 - action.pow(2) + epsilon)
+        log_prob = log_prob.sum(dim=-1, keepdim=True)
         return action, log_prob, z, mean, log_std
         
     
@@ -197,7 +199,7 @@ def update(batch_size,gamma=0.99,soft_tau=1e-2,):
     target_value_func = predicted_new_q_value - log_prob
     # print('t v: ', target_value_func[0])
     # print('p n q v: ', predicted_new_q_value[0])
-
+    print(predicted_value, target_value_func)
     value_loss = value_criterion(predicted_value, target_value_func.detach())
 
     
@@ -210,7 +212,7 @@ def update(batch_size,gamma=0.99,soft_tau=1e-2,):
     policy_optimizer.zero_grad()
     policy_loss.backward()
     policy_optimizer.step()
-    print('reward: ', reward)
+    # print('reward: ', reward)
     print('value_loss: ', value_loss)
     print('q loss: ', q_value_loss1, q_value_loss2)
     print('policy loss: ', policy_loss )
@@ -228,6 +230,19 @@ env = NormalizedActions(gym.make("Pendulum-v0"))
 
 action_dim = env.action_space.shape[0]
 state_dim  = env.observation_space.shape[0]
+
+# NUM_JOINTS=2
+# LINK_LENGTH=[200, 140]
+# INI_JOING_ANGLES=[0.1, 0.1]
+# SCREEN_SIZE=1000
+# SPARSE_REWARD=False
+# SCREEN_SHOT=False
+# DETERMINISTIC=False
+# env=Reacher(screen_size=SCREEN_SIZE, num_joints=NUM_JOINTS, link_lengths = LINK_LENGTH, \
+# ini_joint_angles=INI_JOING_ANGLES, target_pos = [369,430], render=True)
+# action_dim = env.num_actions
+# state_dim  = env.num_observations
+
 hidden_dim = 512
 
 value_net        = ValueNetwork(state_dim, hidden_dim).to(device)
@@ -272,12 +287,14 @@ while frame_idx < max_frames:
     episode_reward = 0
     print(frame_idx)
     for step in range(max_steps):
-        if frame_idx >0:
+        if frame_idx >-1:
             action = policy_net.get_action(state).detach()
             next_state, reward, done, _ = env.step(action.numpy())
+            
         else:
             action = env.action_space.sample()
             next_state, reward, done, _ = env.step(action)
+            
         
         
         replay_buffer.push(state, action, reward, next_state, done)

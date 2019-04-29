@@ -177,7 +177,7 @@ class ActorNetwork(nn.Module):
             action = m.sample().to(device)
             log_prob = m.log_prob(action)
 
-            return action.detach().cpu().numpy(), log_prob.squeeze(0)
+            return action.detach().cpu().numpy(), log_prob.squeeze(0), m.entropy().mean()
 
         elif not DISCRETE and not DETERMINISTIC: # soft actor-critic (continuous)
             self.action_range = 30.
@@ -194,7 +194,7 @@ class ActorNetwork(nn.Module):
             log_prob = log_prob.sum(dim=1, keepdim=True)
             print('mean: ', mean, 'log_std: ', log_std)
             # return action.item(), log_prob, z, mean, log_std
-            return action.detach().cpu().numpy().squeeze(0), log_prob.squeeze(0)
+            return action.detach().cpu().numpy().squeeze(0), log_prob.squeeze(0), Normal(mean, std).entropy().mean()
 
 class CriticNetwork(nn.Module):
     def __init__(self, input_dim, hidden_dim, init_w=3e-3):
@@ -233,7 +233,7 @@ class QNetwork(nn.Module):
         x = self.linear3(x)
         return x
 
-def Update( tuples, rewards, gamma=0.99): 
+def Update0( tuples, rewards, entropies, gamma=0.99, entropy_lambda=1e-3): 
     ''' update with R(s') instead of V(s') in the TD-error'''
     # print('sets: ', actions)
     # print('rewards: ', rewards)
@@ -257,7 +257,7 @@ def Update( tuples, rewards, gamma=0.99):
     # print('policy losses: ', policy_losses)
     # print('value losses: ', value_losses)
     actor_optimizer.zero_grad()
-    policy_loss=torch.stack(policy_losses).sum()
+    policy_loss=torch.stack(policy_losses).sum() - entropy_lambda * entropies
     policy_loss.backward()
     actor_optimizer.step()
     critic_optimizer.zero_grad()
@@ -268,7 +268,7 @@ def Update( tuples, rewards, gamma=0.99):
 
 
 
-def Update2( tuples, rewards, gamma=0.99): 
+def Update1( tuples, rewards, gamma=0.99): 
     ''' update with V(s') in the TD-error'''
     policy_losses = []
     value_losses = []
@@ -322,8 +322,8 @@ actor_net = ActorNetwork(state_dim, action_dim, hidden_dim).to(device)
 critic_net = CriticNetwork(state_dim, hidden_dim).to(device)
 print('Actor Network: ', actor_net)
 print('Critic Network: ', critic_net)
-actor_optimizer = optim.Adam(actor_net.parameters(), lr=3e-6)
-critic_optimizer = optim.Adam(critic_net.parameters(), lr=3e-6)
+actor_optimizer = optim.Adam(actor_net.parameters(), lr=3e-4)
+critic_optimizer = optim.Adam(critic_net.parameters(), lr=3e-4)
 
 def train():
     # hyper-parameters
@@ -344,10 +344,12 @@ def train():
         if ON_POLICY:
             rewards=[]
             SavedSet=[]
+        if not DETERMINISTIC:
+            entropies=0
         for step in range (max_steps):
             frame_idx+=1
             if ON_POLICY:            
-                action, log_prob = actor_net.evaluate_action(state)
+                action, log_prob, entropy = actor_net.evaluate_action(state)
                 # print('state: ', state, 'action: ', action, 'log_prob: ', log_prob)
                 state_value = critic_net(state)
                 next_state, reward, done, _ = env.step(action, SPARSE_REWARD, SCREEN_SHOT)
@@ -359,6 +361,7 @@ def train():
                 if NORM_OBS:
                     next_state=state/SCREEN_SIZE
                 rewards.append(reward)
+                entropies += entropy
             else: # off-policy update with memory buffer
                 pass
 
@@ -372,9 +375,9 @@ def train():
                 break
         episode_rewards.append(episode_reward)
         if UPDATE == 'Approach0':
-            Update(SavedSet, rewards)
+            Update0(SavedSet, rewards, entropies)
         if UPDATE == 'Approach1':
-            Update2(SavedSet, rewards)
+            Update1(SavedSet, rewards)
 
 def main():
     train()

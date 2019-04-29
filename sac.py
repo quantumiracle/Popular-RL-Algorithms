@@ -46,7 +46,7 @@ class ReplayBuffer:
         if len(self.buffer) < self.capacity:
             self.buffer.append(None)
         self.buffer[self.position] = (state, action, reward, next_state, done)
-        self.position = int((self.position + 1) % self.capacity)  # as a ring buffer
+        self.position = (self.position + 1) % self.capacity
     
     def sample(self, batch_size):
         batch = random.sample(self.buffer, batch_size)
@@ -62,24 +62,24 @@ class ReplayBuffer:
     def __len__(self):
         return len(self.buffer)
 
-# class NormalizedActions(gym.ActionWrapper):
-#     def _action(self, action):
-#         low  = self.action_space.low
-#         high = self.action_space.high
+class NormalizedActions(gym.ActionWrapper):
+    def _action(self, action):
+        low  = self.action_space.low
+        high = self.action_space.high
         
-#         action = low + (action + 1.0) * 0.5 * (high - low)
-#         action = np.clip(action, low, high)
+        action = low + (action + 1.0) * 0.5 * (high - low)
+        action = np.clip(action, low, high)
         
-#         return action
+        return action
 
-#     def _reverse_action(self, action):
-#         low  = self.action_space.low
-#         high = self.action_space.high
+    def _reverse_action(self, action):
+        low  = self.action_space.low
+        high = self.action_space.high
         
-#         action = 2 * (action - low) / (high - low) - 1
-#         action = np.clip(action, low, high)
+        action = 2 * (action - low) / (high - low) - 1
+        action = np.clip(action, low, high)
         
-#         return action
+        return action
 
 def plot(frame_idx, rewards, predict_qs):
     clear_output(True)
@@ -87,12 +87,12 @@ def plot(frame_idx, rewards, predict_qs):
     # plt.subplot(131)
     plt.title('frame %s. reward: %s' % (frame_idx, rewards[-1]))
     plt.plot(rewards)
-    plt.plot(predict_qs)
+    # plt.plot(predict_qs)
     plt.savefig('sac.png')
     # plt.show()
 
 class ValueNetwork(nn.Module):
-    def __init__(self, state_dim, hidden_dim, init_w=3e-3):
+    def __init__(self, state_dim, hidden_dim, activation=F.relu, init_w=3e-3):
         super(ValueNetwork, self).__init__()
         
         self.linear1 = nn.Linear(state_dim, hidden_dim)
@@ -101,16 +101,18 @@ class ValueNetwork(nn.Module):
         # weights initialization
         self.linear3.weight.data.uniform_(-init_w, init_w)
         self.linear3.bias.data.uniform_(-init_w, init_w)
+
+        self.activation = activation
         
     def forward(self, state):
-        x = F.relu(self.linear1(state))
-        x = F.relu(self.linear2(x))
+        x = self.activation(self.linear1(state))
+        x = self.activation(self.linear2(x))
         x = self.linear3(x)
         return x
         
         
 class SoftQNetwork(nn.Module):
-    def __init__(self, num_inputs, num_actions, hidden_size, init_w=3e-3):
+    def __init__(self, num_inputs, num_actions, hidden_size, activation=F.relu, init_w=3e-3):
         super(SoftQNetwork, self).__init__()
         
         self.linear1 = nn.Linear(num_inputs + num_actions, hidden_size)
@@ -119,17 +121,19 @@ class SoftQNetwork(nn.Module):
         
         self.linear3.weight.data.uniform_(-init_w, init_w)
         self.linear3.bias.data.uniform_(-init_w, init_w)
+
+        self.activation = activation
         
     def forward(self, state, action):
         x = torch.cat([state, action], 1) # the dim 0 is number of samples
-        x = F.relu(self.linear1(x))
-        x = F.relu(self.linear2(x))
+        x = self.activation(self.linear1(x))
+        x = self.activation(self.linear2(x))
         x = self.linear3(x)
         return x
         
         
 class PolicyNetwork(nn.Module):
-    def __init__(self, num_inputs, num_actions, hidden_size, init_w=3e-3, log_std_min=-20, log_std_max=2):
+    def __init__(self, num_inputs, num_actions, hidden_size, activation=F.relu, init_w=3e-3, log_std_min=-20, log_std_max=2):
         super(PolicyNetwork, self).__init__()
         
         self.log_std_min = log_std_min
@@ -150,13 +154,14 @@ class PolicyNetwork(nn.Module):
 
         self.action_range = 10.
         self.num_actions = num_actions
+        self.activation = activation
 
         
     def forward(self, state):
-        x = F.relu(self.linear1(state))
-        x = F.relu(self.linear2(x))
-        x = F.relu(self.linear3(x))
-        x = F.relu(self.linear4(x))
+        x = self.activation(self.linear1(state))
+        # x = self.activation(self.linear2(x))
+        # x = self.activation(self.linear3(x))
+        x = self.activation(self.linear4(x))
 
         mean    = (self.mean_linear(x))
         # mean    = F.leaky_relu(self.mean_linear(x))
@@ -169,6 +174,7 @@ class PolicyNetwork(nn.Module):
     def evaluate(self, state, epsilon=1e-6):
         '''
         generate sampled action with state as input wrt the policy network;
+        deterministic evaluation provides better performance according to the original paper;
         '''
         mean, log_std = self.forward(state)
         std = log_std.exp() # no clip in evaluation, clip affects gradients flow
@@ -181,16 +187,22 @@ class PolicyNetwork(nn.Module):
         print('mean: ', mean[0])
         print('std: ', std[0])
         # print('action: ', action)
-        # log_prob = Normal(mean, std).log_prob(mean+ std*z.to(device)) - torch.log(1. - action.pow(2) + epsilon)
-        log_prob = Normal(mean, std).log_prob(mean+ std*z.to(device)) - torch.log(1. - action_0.pow(2) + epsilon) -  np.log(self.action_range)
-        # both dims of normal.log_prob and -log(1-a**2) are (N,dim_of_action); 
-        # the Normal.log_prob outputs the same dim of input features instead of 1 dim probability, needs sum up across the features dim to get 1 dim prob; or else use Multivariate Normal.
+        # log_prob = Normal(mean, std).log_prob(mean+ std*z.to(device)) - torch.log(1. - action_0.pow(2) + epsilon)
+        ''' stochastic evaluation '''
+        log_prob = Normal(mean, std).log_prob(mean + std*z.to(device)) - torch.log(1. - action_0.pow(2) + epsilon) -  np.log(self.action_range)
+        ''' deterministic evaluation '''
+        # log_prob = Normal(mean, std).log_prob(mean) - torch.log(1. - torch.tanh(mean).pow(2) + epsilon) -  np.log(self.action_range)
+        '''
+         both dims of normal.log_prob and -log(1-a**2) are (N,dim_of_action); 
+         the Normal.log_prob outputs the same dim of input features instead of 1 dim probability, 
+         needs sum up across the features dim to get 1 dim prob; or else use Multivariate Normal.
+         '''
         print('log_prob: ', log_prob[0])
-        log_prob = log_prob.sum(dim=1, keepdim=True)
+        log_prob = log_prob.sum(dim=-1, keepdim=True)
         return action, log_prob, z, mean, log_std
         
     
-    def get_action(self, state):
+    def get_action(self, state, deterministic):
         state = torch.FloatTensor(state).unsqueeze(0).to(device)
         mean, log_std = self.forward(state)
         std = log_std.exp()
@@ -200,17 +212,17 @@ class PolicyNetwork(nn.Module):
         action = self.action_range* torch.tanh(mean + std*z)
         # action = F.leaky_relu(mean+ std*z.to(device))
         
-        action = action.cpu()#.detach().cpu().numpy()
-        # action = action.detach().cpu()
-        return action[0]
+        action = mean.detach().cpu().numpy()[0] if deterministic else action.detach().cpu().numpy()[0]
+        
+        return action
 
 
     def sample_action(self,):
         a=torch.FloatTensor(self.num_actions).uniform_(-1, 1)
-        return self.action_range*a
+        return (self.action_range*a).numpy()
 
-def update(batch_size,gamma=0.99,soft_tau=1e-2,):
-    alpha = 0.0  # trade-off between exploration (max entropy) and exploitation (max Q) 
+def update(batch_size, reward_scale, gamma=0.99,soft_tau=1e-2):
+    alpha = 1.0  # trade-off between exploration (max entropy) and exploitation (max Q)
     
     state, action, reward, next_state, done = replay_buffer.sample(batch_size)
     # print('sample:', state, action,  reward, done)
@@ -224,13 +236,13 @@ def update(batch_size,gamma=0.99,soft_tau=1e-2,):
     predicted_q_value1 = soft_q_net1(state, action)
     predicted_q_value2 = soft_q_net2(state, action)
     predicted_value    = value_net(state)
-    new_action, log_prob, epsilon, mean, log_std = policy_net.evaluate(state)
+    new_action, log_prob, z, mean, log_std = policy_net.evaluate(state)
 
-    reward = (reward - reward.mean(dim=0)) /reward.std(dim=0) # normalize with batch mean and std
+    reward = reward_scale*(reward - reward.mean(dim=0)) /reward.std(dim=0) # normalize with batch mean and std
 # Training Q Function
     target_value = target_value_net(next_state)
     target_q_value = reward + (1 - done) * gamma * target_value # if done==1, only reward
-    # print('r: ', reward)
+    print('r: ', reward[0])
     print('tar v: ', target_value[0])
     print('pre q 1: ', predicted_q_value1[0] )
     print('t q : ', target_q_value[0])
@@ -264,6 +276,15 @@ def update(batch_size,gamma=0.99,soft_tau=1e-2,):
     # policy_loss = (alpha * log_prob - soft_q_net1(state, new_action)).mean()  # Openai Spinning Up implementation
     # policy_loss = (alpha * log_prob - (predicted_new_q_value - predicted_value.detach())).mean() # max Advantage instead of Q to prevent the Q-value drifted high
 
+    ## version of github/higgsfield
+    # log_prob_target=predicted_new_q_value - predicted_value
+    # policy_loss = (log_prob * (log_prob - log_prob_target).detach()).mean()
+    # mean_lambda=1e-3
+    # std_lambda=1e-3
+    # mean_loss = mean_lambda * mean.pow(2).mean()
+    # std_loss = std_lambda * log_std.pow(2).mean()
+    # policy_loss += mean_loss + std_loss
+
 
     policy_optimizer.zero_grad()
     policy_loss.backward()
@@ -291,18 +312,25 @@ INI_JOING_ANGLES=[0.1, 0.1]
 SCREEN_SIZE=1000
 SPARSE_REWARD=False
 SCREEN_SHOT=False
-env=Reacher(screen_size=SCREEN_SIZE, num_joints=NUM_JOINTS, link_lengths = LINK_LENGTH, \
-ini_joint_angles=INI_JOING_ANGLES, target_pos = [669,430], render=True)
-action_dim = env.num_actions
-state_dim  = env.num_observations
+DETERMINISTIC=False
+ENV = ['Pendulum', 'Reacher'][1]
+if ENV == 'Reacher':
+    env=Reacher(screen_size=SCREEN_SIZE, num_joints=NUM_JOINTS, link_lengths = LINK_LENGTH, \
+    ini_joint_angles=INI_JOING_ANGLES, target_pos = [369,430], render=True)
+    action_dim = env.num_actions
+    state_dim  = env.num_observations
+elif ENV == 'Pendulum':
+    env = NormalizedActions(gym.make("Pendulum-v0"))
+    action_dim = env.action_space.shape[0]
+    state_dim  = env.observation_space.shape[0]
 hidden_dim = 512
 
-value_net        = ValueNetwork(state_dim, hidden_dim).to(device)
-target_value_net = ValueNetwork(state_dim, hidden_dim).to(device)
+value_net        = ValueNetwork(state_dim, hidden_dim, activation=F.relu).to(device)
+target_value_net = ValueNetwork(state_dim, hidden_dim, activation=F.relu).to(device)
 
-soft_q_net1 = SoftQNetwork(state_dim, action_dim, hidden_dim).to(device)
-soft_q_net2 = SoftQNetwork(state_dim, action_dim, hidden_dim).to(device)
-policy_net = PolicyNetwork(state_dim, action_dim, hidden_dim).to(device)
+soft_q_net1 = SoftQNetwork(state_dim, action_dim, hidden_dim, activation=F.relu).to(device)
+soft_q_net2 = SoftQNetwork(state_dim, action_dim, hidden_dim, activation=F.relu).to(device)
+policy_net = PolicyNetwork(state_dim, action_dim, hidden_dim, activation=F.relu).to(device)
 
 print('(Target) Value Network: ', value_net)
 print('Soft Q Network (1,2): ', soft_q_net1)
@@ -326,7 +354,7 @@ soft_q_optimizer2 = optim.Adam(soft_q_net2.parameters(), lr=soft_q_lr)
 policy_optimizer = optim.Adam(policy_net.parameters(), lr=policy_lr)
 
 
-replay_buffer_size = 1e6
+replay_buffer_size = int(1e6)
 replay_buffer = ReplayBuffer(replay_buffer_size)
 
 
@@ -335,14 +363,19 @@ max_frames  = 40000
 max_steps   = 20
 frame_idx   = 0
 batch_size  = 128
-explore_steps = 200
+explore_steps = 0
 rewards     = []
 predict_qs  = []
 NORM_OBS=True
+reward_scale=10.0
 
 # training loop
 while frame_idx < max_frames:
-    state = env.reset(SCREEN_SHOT)
+    if ENV == 'Reacher':
+        state = env.reset(SCREEN_SHOT)
+    elif ENV == 'Pendulum':
+        state =  env.reset()
+
     if NORM_OBS:
         state = state/SCREEN_SIZE
     episode_reward = 0
@@ -350,13 +383,17 @@ while frame_idx < max_frames:
     
     
     for step in range(max_steps):
-        if frame_idx > explore_steps:
-            action = policy_net.get_action(state).detach()
+        if frame_idx >= explore_steps:
+            action = policy_net.get_action(state, deterministic=DETERMINISTIC)
         # action = policy_net.get_action(state)
         else:
             action = policy_net.sample_action()
         print('action: ', action)
-        next_state, reward, done, _ = env.step(action.numpy(), SPARSE_REWARD, SCREEN_SHOT)
+        if ENV ==  'Reacher':
+            next_state, reward, done, _ = env.step(action, SPARSE_REWARD, SCREEN_SHOT)
+        elif ENV ==  'Pendulum':
+            next_state, reward, done, _ = env.step(action)
+
         if NORM_OBS:
             next_state=next_state/SCREEN_SIZE
         replay_buffer.push(state, action, reward, next_state, done)
@@ -367,10 +404,10 @@ while frame_idx < max_frames:
         print(frame_idx)
         
         if len(replay_buffer) > batch_size:
-            predict_q=update(batch_size)
+            predict_q=update(batch_size, reward_scale)
             print('update')
         
-        if frame_idx % batch_size == 0:
+        if frame_idx % 500 == 0:
             plot(frame_idx, rewards, predict_qs)
         
         if done:

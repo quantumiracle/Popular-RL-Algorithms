@@ -23,10 +23,6 @@ from IPython.display import display
 from reacher import Reacher
 
 
-# use_cuda = torch.cuda.is_available()
-# device   = torch.device("cuda" if use_cuda else "cpu")
-# print(device)
-
 GPU = True
 device_idx = 0
 if GPU:
@@ -84,10 +80,8 @@ class NormalizedActions(gym.ActionWrapper):
 def plot(frame_idx, rewards, predict_qs):
     clear_output(True)
     plt.figure(figsize=(20,5))
-    # plt.subplot(131)
     plt.title('frame %s. reward: %s' % (frame_idx, rewards[-1]))
     plt.plot(rewards)
-    # plt.plot(predict_qs)
     plt.savefig('sac.png')
     # plt.show()
 
@@ -159,14 +153,13 @@ class PolicyNetwork(nn.Module):
         
     def forward(self, state):
         x = self.activation(self.linear1(state))
-        # x = self.activation(self.linear2(x))
-        # x = self.activation(self.linear3(x))
+        x = self.activation(self.linear2(x))
+        x = self.activation(self.linear3(x))
         x = self.activation(self.linear4(x))
 
         mean    = (self.mean_linear(x))
         # mean    = F.leaky_relu(self.mean_linear(x))
         log_std = self.log_std_linear(x)
-        # print(log_std)
         log_std = torch.clamp(log_std, self.log_std_min, self.log_std_max)
         
         return mean, log_std
@@ -183,11 +176,6 @@ class PolicyNetwork(nn.Module):
         z      = normal.sample() 
         action_0 = torch.tanh(mean + std*z.to(device)) # TanhNormal distribution as actions; reparameterization trick
         action = self.action_range*action_0
-        # action = F.leaky_relu(mean+ std*z.to(device))
-        print('mean: ', mean[0])
-        print('std: ', std[0])
-        # print('action: ', action)
-        # log_prob = Normal(mean, std).log_prob(mean+ std*z.to(device)) - torch.log(1. - action_0.pow(2) + epsilon)
         ''' stochastic evaluation '''
         log_prob = Normal(mean, std).log_prob(mean + std*z.to(device)) - torch.log(1. - action_0.pow(2) + epsilon) -  np.log(self.action_range)
         ''' deterministic evaluation '''
@@ -197,7 +185,6 @@ class PolicyNetwork(nn.Module):
          the Normal.log_prob outputs the same dim of input features instead of 1 dim probability, 
          needs sum up across the features dim to get 1 dim prob; or else use Multivariate Normal.
          '''
-        print('log_prob: ', log_prob[0])
         log_prob = log_prob.sum(dim=-1, keepdim=True)
         return action, log_prob, z, mean, log_std
         
@@ -209,9 +196,7 @@ class PolicyNetwork(nn.Module):
         
         normal = Normal(0, 1)
         z      = normal.sample().to(device)
-        action = self.action_range* torch.tanh(mean + std*z)
-        # action = F.leaky_relu(mean+ std*z.to(device))
-        
+        action = self.action_range* torch.tanh(mean + std*z)        
         action = mean.detach().cpu().numpy()[0] if deterministic else action.detach().cpu().numpy()[0]
         
         return action
@@ -242,10 +227,6 @@ def update(batch_size, reward_scale, gamma=0.99,soft_tau=1e-2):
 # Training Q Function
     target_value = target_value_net(next_state)
     target_q_value = reward + (1 - done) * gamma * target_value # if done==1, only reward
-    print('r: ', reward[0])
-    print('tar v: ', target_value[0])
-    print('pre q 1: ', predicted_q_value1[0] )
-    print('t q : ', target_q_value[0])
     q_value_loss1 = soft_q_criterion1(predicted_q_value1, target_q_value.detach())  # detach: no gradients for the variable
     q_value_loss2 = soft_q_criterion2(predicted_q_value2, target_q_value.detach())
 
@@ -260,10 +241,6 @@ def update(batch_size, reward_scale, gamma=0.99,soft_tau=1e-2):
 # Training Value Function
     predicted_new_q_value = torch.min(soft_q_net1(state, new_action),soft_q_net2(state, new_action))
     target_value_func = predicted_new_q_value - alpha * log_prob # for stochastic training, it equals to expectation over action
-    print('pre v: ', predicted_value[0])
-    # print('pre n q: ', predicted_new_q_value)
-    # print('log p: ', log_prob)
-    print('t v: ', target_value_func[0])
     value_loss = value_criterion(predicted_value, target_value_func.detach())
 
     
@@ -272,11 +249,14 @@ def update(batch_size, reward_scale, gamma=0.99,soft_tau=1e-2):
     value_optimizer.step()
 
 # Training Policy Function
+    ''' implementation 1 '''
     policy_loss = (alpha * log_prob - predicted_new_q_value).mean()
+    ''' implementation 2 '''
     # policy_loss = (alpha * log_prob - soft_q_net1(state, new_action)).mean()  # Openai Spinning Up implementation
+    ''' implementation 3 '''
     # policy_loss = (alpha * log_prob - (predicted_new_q_value - predicted_value.detach())).mean() # max Advantage instead of Q to prevent the Q-value drifted high
 
-    ## version of github/higgsfield
+    ''' implementation 4 '''  # version of github/higgsfield
     # log_prob_target=predicted_new_q_value - predicted_value
     # policy_loss = (log_prob * (log_prob - log_prob_target).detach()).mean()
     # mean_lambda=1e-3
@@ -316,7 +296,7 @@ DETERMINISTIC=False
 ENV = ['Pendulum', 'Reacher'][1]
 if ENV == 'Reacher':
     env=Reacher(screen_size=SCREEN_SIZE, num_joints=NUM_JOINTS, link_lengths = LINK_LENGTH, \
-    ini_joint_angles=INI_JOING_ANGLES, target_pos = [369,430], render=True)
+    ini_joint_angles=INI_JOING_ANGLES, target_pos = [369,430], render=True, , change_goal=False)
     action_dim = env.num_actions
     state_dim  = env.num_observations
 elif ENV == 'Pendulum':
@@ -366,7 +346,6 @@ batch_size  = 128
 explore_steps = 0
 rewards     = []
 predict_qs  = []
-NORM_OBS=True
 reward_scale=10.0
 
 # training loop
@@ -376,8 +355,6 @@ while frame_idx < max_frames:
     elif ENV == 'Pendulum':
         state =  env.reset()
 
-    if NORM_OBS:
-        state = state/SCREEN_SIZE
     episode_reward = 0
     predict_q = 0
     
@@ -385,17 +362,13 @@ while frame_idx < max_frames:
     for step in range(max_steps):
         if frame_idx >= explore_steps:
             action = policy_net.get_action(state, deterministic=DETERMINISTIC)
-        # action = policy_net.get_action(state)
         else:
             action = policy_net.sample_action()
-        print('action: ', action)
         if ENV ==  'Reacher':
             next_state, reward, done, _ = env.step(action, SPARSE_REWARD, SCREEN_SHOT)
         elif ENV ==  'Pendulum':
             next_state, reward, done, _ = env.step(action)
 
-        if NORM_OBS:
-            next_state=next_state/SCREEN_SIZE
         replay_buffer.push(state, action, reward, next_state, done)
         
         state = next_state
@@ -405,7 +378,6 @@ while frame_idx < max_frames:
         
         if len(replay_buffer) > batch_size:
             predict_q=update(batch_size, reward_scale)
-            print('update')
         
         if frame_idx % 500 == 0:
             plot(frame_idx, rewards, predict_qs)

@@ -1,9 +1,8 @@
 '''
-Twin Delayed DDPG (TD3)
+Twin Delayed DDPG (TD3), if no twin no delayed then it's DDPG.
 using target Q instead of V net: 2 Q net, 2 target Q net, 1 policy net, 1 target policy net
+original paper: https://arxiv.org/pdf/1802.09477.pdf
 '''
-
-
 import math
 import random
 
@@ -23,10 +22,6 @@ from IPython.display import display
 from reacher import Reacher
 
 torch.manual_seed(1234)  #Reproducibility
-
-# use_cuda = torch.cuda.is_available()
-# device   = torch.device("cuda" if use_cuda else "cpu")
-# print(device)
 
 GPU = True
 device_idx = 0
@@ -63,34 +58,25 @@ class ReplayBuffer:
     def __len__(self):
         return len(self.buffer)
 
-# class NormalizedActions(gym.ActionWrapper):
-#     def _action(self, action):
-#         low  = self.action_space.low
-#         high = self.action_space.high
+class NormalizedActions(gym.ActionWrapper):
+    def _action(self, action):
+        low  = self.action_space.low
+        high = self.action_space.high
         
-#         action = low + (action + 1.0) * 0.5 * (high - low)
-#         action = np.clip(action, low, high)
+        action = low + (action + 1.0) * 0.5 * (high - low)
+        action = np.clip(action, low, high)
         
-#         return action
+        return action
 
-#     def _reverse_action(self, action):
-#         low  = self.action_space.low
-#         high = self.action_space.high
+    def _reverse_action(self, action):
+        low  = self.action_space.low
+        high = self.action_space.high
         
-#         action = 2 * (action - low) / (high - low) - 1
-#         action = np.clip(action, low, high)
+        action = 2 * (action - low) / (high - low) - 1
+        action = np.clip(action, low, high)
         
-#         return action
+        return action
 
-def plot(frame_idx, rewards, predict_qs):
-    clear_output(True)
-    plt.figure(figsize=(20,5))
-    # plt.subplot(131)
-    plt.title('frame %s. reward: %s' % (frame_idx, rewards[-1]))
-    plt.plot(rewards)
-    plt.plot(predict_qs)
-    plt.savefig('td3.png')
-    # plt.show()
 
 class ValueNetwork(nn.Module):
     def __init__(self, state_dim, hidden_dim, init_w=3e-3):
@@ -106,8 +92,8 @@ class ValueNetwork(nn.Module):
         
     def forward(self, state):
         x = F.relu(self.linear1(state))
-        # x = F.relu(self.linear2(x))
-        # x = F.relu(self.linear3(x))
+        x = F.relu(self.linear2(x))
+        x = F.relu(self.linear3(x))
         x = self.linear4(x)
         return x
         
@@ -127,14 +113,14 @@ class QNetwork(nn.Module):
     def forward(self, state, action):
         x = torch.cat([state, action], 1) # the dim 0 is number of samples
         x = F.relu(self.linear1(x))
-        # x = F.relu(self.linear2(x))
-        # x = F.relu(self.linear3(x))
+        x = F.relu(self.linear2(x))
+        x = F.relu(self.linear3(x))
         x = self.linear4(x)
         return x
         
         
 class PolicyNetwork(nn.Module):
-    def __init__(self, num_inputs, num_actions, hidden_size, init_w=3e-3, log_std_min=-20, log_std_max=2):
+    def __init__(self, num_inputs, num_actions, hidden_size, action_range=1., init_w=3e-3, log_std_min=-20, log_std_max=2):
         super(PolicyNetwork, self).__init__()
         
         self.log_std_min = log_std_min
@@ -153,23 +139,22 @@ class PolicyNetwork(nn.Module):
         self.log_std_linear.weight.data.uniform_(-init_w, init_w)
         self.log_std_linear.bias.data.uniform_(-init_w, init_w)
 
-        self.action_range = 100.
+        self.action_range = action_range
         self.num_actions = num_actions
 
         
     def forward(self, state):
         x = F.relu(self.linear1(state))
-        # x = F.relu(self.linear2(x))
-        # x = F.relu(self.linear3(x))
-        # x = F.relu(self.linear4(x))
+        x = F.relu(self.linear2(x))
+        x = F.relu(self.linear3(x))
+        x = F.relu(self.linear4(x))
 
         mean  = F.tanh(self.mean_linear(x))
         # mean = F.leaky_relu(self.mean_linear(x))
         # mean = torch.clamp(mean, -30, 30)
 
         log_std = self.log_std_linear(x)
-        # print(log_std)
-        log_std = torch.clamp(log_std, self.log_std_min, self.log_std_max)
+        log_std = torch.clamp(log_std, self.log_std_min, self.log_std_max) # clip the log_std into reasonable range
         
         return mean, log_std
     
@@ -184,14 +169,10 @@ class PolicyNetwork(nn.Module):
         z      = normal.sample() 
         action_0 = torch.tanh(mean + std*z.to(device)) # TanhNormal distribution as actions; reparameterization trick
         action = self.action_range*mean if deterministic else self.action_range*action_0
-        print('mean: ', mean[0])
-        print('std: ', std[0])
-        print('eval_action: ', action[0])
-        # log_prob = Normal(mean, std).log_prob(mean+ std*z.to(device)) - torch.log(1. - action.pow(2) + epsilon)
         log_prob = Normal(mean, std).log_prob(mean+ std*z.to(device)) - torch.log(1. - action_0.pow(2) + epsilon) -  np.log(self.action_range)
         # both dims of normal.log_prob and -log(1-a**2) are (N,dim_of_action); 
-        # the Normal.log_prob outputs the same dim of input features instead of 1 dim probability, needs sum up across the features dim to get 1 dim prob; or else use Multivariate Normal.
-        print('log_prob: ', log_prob[0])
+        # the Normal.log_prob outputs the same dim of input features instead of 1 dim probability, 
+        # needs sum up across the features dim to get 1 dim prob; or else use Multivariate Normal.
         log_prob = log_prob.sum(dim=1, keepdim=True)
 
         ''' add noise '''
@@ -220,16 +201,16 @@ class PolicyNetwork(nn.Module):
         noise = normal.sample(action.shape) * explore_noise_scale
         action = self.action_range*action + noise.to(device)
 
-        return action
+        return action.numpy()
 
 
     def sample_action(self,):
         a=torch.FloatTensor(self.num_actions).uniform_(-1, 1)
-        return self.action_range*a
+        return self.action_range*a.numpy()
 
 
 class TD3_Trainer():
-    def __init__(self, replay_buffer, hidden_dim, policy_target_update_interval=1):
+    def __init__(self, replay_buffer, hidden_dim, action_range, policy_target_update_interval=1):
         self.replay_buffer = replay_buffer
 
 
@@ -237,8 +218,8 @@ class TD3_Trainer():
         self.q_net2 = QNetwork(state_dim, action_dim, hidden_dim).to(device)
         self.target_q_net1 = QNetwork(state_dim, action_dim, hidden_dim).to(device)
         self.target_q_net2 = QNetwork(state_dim, action_dim, hidden_dim).to(device)
-        self.policy_net = PolicyNetwork(state_dim, action_dim, hidden_dim).to(device)
-        self.target_policy_net = PolicyNetwork(state_dim, action_dim, hidden_dim).to(device)
+        self.policy_net = PolicyNetwork(state_dim, action_dim, hidden_dim, action_range).to(device)
+        self.target_policy_net = PolicyNetwork(state_dim, action_dim, hidden_dim, action_range).to(device)
         print('Q Network (1,2): ', self.q_net1)
         print('Policy Network: ', self.policy_net)
 
@@ -247,8 +228,8 @@ class TD3_Trainer():
         self.target_policy_net = self.target_ini(self.policy_net, self.target_policy_net)
         
 
-        q_lr = 1e-3
-        policy_lr = 1e-4
+        q_lr = 3e-4
+        policy_lr = 3e-4
         self.update_cnt = 0
         self.policy_target_update_interval = policy_target_update_interval
 
@@ -270,7 +251,7 @@ class TD3_Trainer():
 
         return target_net
     
-    def update(self, batch_size, deterministic, eval_noise_scale, reward_scale=10., auto_entropy=True, target_entropy=-2, gamma=0.9,soft_tau=1e-2):
+    def update(self, batch_size, deterministic, eval_noise_scale, reward_scale=10., gamma=0.9,soft_tau=1e-2):
         state, action, reward, next_state, done = self.replay_buffer.sample(batch_size)
         # print('sample:', state, action,  reward, done)
 
@@ -289,14 +270,11 @@ class TD3_Trainer():
 
     # Training Q Function
         target_q_min = torch.min(self.target_q_net1(next_state, new_next_action),self.target_q_net2(next_state, new_next_action))
-        # target_q_min = self.target_q_net1(next_state, new_next_action)
+
         target_q_value = reward + (1 - done) * gamma * target_q_min # if done==1, only reward
-        print('r: ', reward[0])
-        print('pre q 1: ', predicted_q_value1[0] )
-        print('t q : ', target_q_value[0])
+
         q_value_loss1 = ((predicted_q_value1 - target_q_value.detach())**2).mean()  # detach: no gradients for the variable
         q_value_loss2 = ((predicted_q_value2 - target_q_value.detach())**2).mean()
-
 
         self.q_optimizer1.zero_grad()
         q_value_loss1.backward()
@@ -331,26 +309,41 @@ class TD3_Trainer():
 
         return predicted_q_value1.mean()
 
+def plot(frame_idx, rewards, predict_qs):
+    clear_output(True)
+    plt.figure(figsize=(20,5))
+    plt.title('frame %s. reward: %s' % (frame_idx, rewards[-1]))
+    plt.plot(rewards)
+    plt.plot(predict_qs)
+    plt.savefig('td3.png')
+    # plt.show()
 
 
-# intialization
-# NUM_JOINTS=4
-# LINK_LENGTH=[200, 140, 80, 50]
-# INI_JOING_ANGLES=[0.1, 0.1, 0.1, 0.1]
-NUM_JOINTS=2
-LINK_LENGTH=[200, 140]
-INI_JOING_ANGLES=[0.1, 0.1]
-SCREEN_SIZE=1000
-SPARSE_REWARD=False
-SCREEN_SHOT=False
-AUTO_ENTROPY=True
-DETERMINISTIC=True
-env=Reacher(screen_size=SCREEN_SIZE, num_joints=NUM_JOINTS, link_lengths = LINK_LENGTH, \
-ini_joint_angles=INI_JOING_ANGLES, target_pos = [269,430], render=True)
-action_dim = env.num_actions
-state_dim  = env.num_observations
-hidden_dim = 128
 
+
+
+ENV = ['Pendulum', 'Reacher'][1]
+if ENV == 'Reacher':
+    NUM_JOINTS=2
+    LINK_LENGTH=[200, 140]
+    INI_JOING_ANGLES=[0.1, 0.1]
+    # NUM_JOINTS=4
+    # LINK_LENGTH=[200, 140, 80, 50]
+    # INI_JOING_ANGLES=[0.1, 0.1, 0.1, 0.1]
+    SCREEN_SIZE=1000
+    SPARSE_REWARD=False
+    SCREEN_SHOT=False
+    action_range = 10.0
+
+    env=Reacher(screen_size=SCREEN_SIZE, num_joints=NUM_JOINTS, link_lengths = LINK_LENGTH, \
+    ini_joint_angles=INI_JOING_ANGLES, target_pos = [369,430], render=True, change_goal=False)
+    action_dim = env.num_actions
+    state_dim  = env.num_observations
+elif ENV == 'Pendulum':
+    env = NormalizedActions(gym.make("Pendulum-v0"))
+    action_dim = env.action_space.shape[0]
+    state_dim  = env.observation_space.shape[0]
+    action_range=1.
 
 
 
@@ -358,24 +351,26 @@ replay_buffer_size = 5e5
 replay_buffer = ReplayBuffer(replay_buffer_size)
 
 
-# hyper-parameters
+# hyper-parameters for RL training
 max_frames  = 40000
 max_steps   = 20
 frame_idx   = 0
 batch_size  = 64
 explore_steps = 500  # for random action sampling in the beginning of training
 update_itr = 1
-policy_target_update_interval = 3
+hidden_dim = 128
+policy_target_update_interval = 3 # delayed update for the policy network and target networks
+DETERMINISTIC=False
 rewards     = []
 predict_qs  = []
-NORM_OBS=True
-td3_trainer=TD3_Trainer(replay_buffer, hidden_dim=hidden_dim, policy_target_update_interval=policy_target_update_interval )
+td3_trainer=TD3_Trainer(replay_buffer, hidden_dim=hidden_dim, policy_target_update_interval=policy_target_update_interval, action_range=action_range )
 
 # training loop
 while frame_idx < max_frames:
-    state = env.reset(SCREEN_SHOT)
-    if NORM_OBS:
-        state = state/SCREEN_SIZE
+    if ENV == 'Reacher':
+        state = env.reset(SCREEN_SHOT)
+    elif ENV == 'Pendulum':
+        state =  env.reset()
     episode_reward = 0
     predict_q = 0
     
@@ -385,10 +380,10 @@ while frame_idx < max_frames:
             action = td3_trainer.policy_net.get_action(state, deterministic = DETERMINISTIC, explore_noise_scale=1.0)
         else:
             action = td3_trainer.policy_net.sample_action()
-        print('exp_action: ', action)
-        next_state, reward, done, _ = env.step(action, SPARSE_REWARD, SCREEN_SHOT)
-        if NORM_OBS:
-            next_state=next_state/SCREEN_SIZE
+        if ENV ==  'Reacher':
+            next_state, reward, done, _ = env.step(action, SPARSE_REWARD, SCREEN_SHOT)
+        elif ENV ==  'Pendulum':
+            next_state, reward, done, _ = env.step(action)  
         replay_buffer.push(state, action, reward, next_state, done)
         
         state = next_state
@@ -398,8 +393,7 @@ while frame_idx < max_frames:
         
         if len(replay_buffer) > batch_size:
             for i in range(update_itr):
-                predict_q=td3_trainer.update(batch_size, deterministic=DETERMINISTIC, eval_noise_scale=0.5, reward_scale=1., auto_entropy=AUTO_ENTROPY, target_entropy=-1.*action_dim)
-            print('update')
+                predict_q=td3_trainer.update(batch_size, deterministic=DETERMINISTIC, eval_noise_scale=0.5, reward_scale=1.)
         
         if frame_idx % 500 == 0:
             plot(frame_idx, rewards, predict_qs)

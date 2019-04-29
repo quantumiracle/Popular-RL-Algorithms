@@ -22,11 +22,6 @@ from matplotlib import animation
 from IPython.display import display
 from reacher import Reacher
 
-
-# use_cuda = torch.cuda.is_available()
-# device   = torch.device("cuda" if use_cuda else "cpu")
-# print(device)
-
 GPU = True
 device_idx = 0
 if GPU:
@@ -62,29 +57,28 @@ class ReplayBuffer:
     def __len__(self):
         return len(self.buffer)
 
-# class NormalizedActions(gym.ActionWrapper):
-#     def _action(self, action):
-#         low  = self.action_space.low
-#         high = self.action_space.high
+class NormalizedActions(gym.ActionWrapper):
+    def _action(self, action):
+        low  = self.action_space.low
+        high = self.action_space.high
         
-#         action = low + (action + 1.0) * 0.5 * (high - low)
-#         action = np.clip(action, low, high)
+        action = low + (action + 1.0) * 0.5 * (high - low)
+        action = np.clip(action, low, high)
         
-#         return action
+        return action
 
-#     def _reverse_action(self, action):
-#         low  = self.action_space.low
-#         high = self.action_space.high
+    def _reverse_action(self, action):
+        low  = self.action_space.low
+        high = self.action_space.high
         
-#         action = 2 * (action - low) / (high - low) - 1
-#         action = np.clip(action, low, high)
+        action = 2 * (action - low) / (high - low) - 1
+        action = np.clip(action, low, high)
         
-#         return action
+        return action
 
 def plot(frame_idx, rewards, predict_qs):
     clear_output(True)
     plt.figure(figsize=(20,5))
-    # plt.subplot(131)
     plt.title('frame %s. reward: %s' % (frame_idx, rewards[-1]))
     plt.plot(rewards)
     plt.plot(predict_qs)
@@ -133,7 +127,7 @@ class SoftQNetwork(nn.Module):
         
         
 class PolicyNetwork(nn.Module):
-    def __init__(self, num_inputs, num_actions, hidden_size, init_w=3e-3, log_std_min=-20, log_std_max=2):
+    def __init__(self, num_inputs, num_actions, hidden_size, action_range=1., init_w=3e-3, log_std_min=-20, log_std_max=2):
         super(PolicyNetwork, self).__init__()
         
         self.log_std_min = log_std_min
@@ -152,7 +146,7 @@ class PolicyNetwork(nn.Module):
         self.log_std_linear.weight.data.uniform_(-init_w, init_w)
         self.log_std_linear.bias.data.uniform_(-init_w, init_w)
 
-        self.action_range = 10.
+        self.action_range = action_range
         self.num_actions = num_actions
 
         
@@ -165,7 +159,6 @@ class PolicyNetwork(nn.Module):
         mean    = (self.mean_linear(x))
         # mean    = F.leaky_relu(self.mean_linear(x))
         log_std = self.log_std_linear(x)
-        # print(log_std)
         log_std = torch.clamp(log_std, self.log_std_min, self.log_std_max)
         
         return mean, log_std
@@ -181,15 +174,10 @@ class PolicyNetwork(nn.Module):
         z      = normal.sample() 
         action_0 = torch.tanh(mean + std*z.to(device)) # TanhNormal distribution as actions; reparameterization trick
         action = self.action_range*action_0
-        # action = F.leaky_relu(mean+ std*z.to(device))
-        print('mean: ', mean[0])
-        print('std: ', std[0])
-        # print('action: ', action)
-        # log_prob = Normal(mean, std).log_prob(mean+ std*z.to(device)) - torch.log(1. - action.pow(2) + epsilon)
         log_prob = Normal(mean, std).log_prob(mean+ std*z.to(device)) - torch.log(1. - action_0.pow(2) + epsilon) -  np.log(self.action_range)
         # both dims of normal.log_prob and -log(1-a**2) are (N,dim_of_action); 
-        # the Normal.log_prob outputs the same dim of input features instead of 1 dim probability, needs sum up across the features dim to get 1 dim prob; or else use Multivariate Normal.
-        print('log_prob: ', log_prob[0])
+        # the Normal.log_prob outputs the same dim of input features instead of 1 dim probability, 
+        # needs sum up across the features dim to get 1 dim prob; or else use Multivariate Normal.
         log_prob = log_prob.sum(dim=1, keepdim=True)
         return action, log_prob, z, mean, log_std
         
@@ -202,27 +190,25 @@ class PolicyNetwork(nn.Module):
         normal = Normal(0, 1)
         z      = normal.sample().to(device)
         action = self.action_range* torch.tanh(mean + std*z)
-        # action = F.leaky_relu(mean+ std*z.to(device))
         
-        action = mean.detach().cpu().numpy()[0] if deterministic else action.detach().cpu().numpy()[0]
+        action = self.action_range*mean.detach().cpu().numpy()[0] if deterministic else action.detach().cpu().numpy()[0]
         return action
 
 
     def sample_action(self,):
         a=torch.FloatTensor(self.num_actions).uniform_(-1, 1)
-        return self.action_range*a
+        return self.action_range*a.numpy()
 
 
 class SAC_Trainer():
-    def __init__(self, replay_buffer, hidden_dim):
+    def __init__(self, replay_buffer, hidden_dim, action_range):
         self.replay_buffer = replay_buffer
-
 
         self.soft_q_net1 = SoftQNetwork(state_dim, action_dim, hidden_dim).to(device)
         self.soft_q_net2 = SoftQNetwork(state_dim, action_dim, hidden_dim).to(device)
         self.target_soft_q_net1 = SoftQNetwork(state_dim, action_dim, hidden_dim).to(device)
         self.target_soft_q_net2 = SoftQNetwork(state_dim, action_dim, hidden_dim).to(device)
-        self.policy_net = PolicyNetwork(state_dim, action_dim, hidden_dim).to(device)
+        self.policy_net = PolicyNetwork(state_dim, action_dim, hidden_dim, action_range).to(device)
         self.log_alpha = torch.zeros(1, dtype=torch.float32, requires_grad=True, device=device)
         print('Soft Q Network (1,2): ', self.soft_q_net1)
         print('Policy Network: ', self.policy_net)
@@ -273,14 +259,10 @@ class SAC_Trainer():
         else:
             self.alpha = 1.
             alpha_loss = 0
-        print('alpha: ',self.alpha)
 
     # Training Q Function
         target_q_min = torch.min(self.target_soft_q_net1(next_state, new_next_action),self.target_soft_q_net2(next_state, new_next_action)) - self.alpha * next_log_prob
         target_q_value = reward + (1 - done) * gamma * target_q_min # if done==1, only reward
-        print('r: ', reward[0])
-        print('pre q 1: ', predicted_q_value1[0] )
-        print('t q : ', target_q_value[0])
         q_value_loss1 = self.soft_q_criterion1(predicted_q_value1, target_q_value.detach())  # detach: no gradients for the variable
         q_value_loss2 = self.soft_q_criterion2(predicted_q_value2, target_q_value.detach())
 
@@ -316,49 +298,53 @@ class SAC_Trainer():
         return predicted_new_q_value.mean()
 
 
-
-# intialization
-# NUM_JOINTS=4
-# LINK_LENGTH=[200, 140, 80, 50]
-# INI_JOING_ANGLES=[0.1, 0.1, 0.1, 0.1]
-NUM_JOINTS=2
-LINK_LENGTH=[200, 140]
-INI_JOING_ANGLES=[0.1, 0.1]
-SCREEN_SIZE=1000
-SPARSE_REWARD=False
-SCREEN_SHOT=False
-AUTO_ENTROPY=True
-DETERMINISTIC=False
-env=Reacher(screen_size=SCREEN_SIZE, num_joints=NUM_JOINTS, link_lengths = LINK_LENGTH, \
-ini_joint_angles=INI_JOING_ANGLES, target_pos = [269,430], render=True)
-action_dim = env.num_actions
-state_dim  = env.num_observations
-hidden_dim = 512
-
-
-
-
 replay_buffer_size = 1e6
 replay_buffer = ReplayBuffer(replay_buffer_size)
 
 
-# hyper-parameters
+# hyper-parameters for RL training
 max_frames  = 40000
 max_steps   = 20
 frame_idx   = 0
 batch_size  = 256
 explore_steps = 200  # for random action sampling in the beginning of training
 update_itr = 1
+AUTO_ENTROPY=True
+DETERMINISTIC=False
+hidden_dim = 512
 rewards     = []
 predict_qs  = []
-NORM_OBS=True
-sac_trainer=SAC_Trainer(replay_buffer, hidden_dim=hidden_dim )
 
+ENV = ['Pendulum', 'Reacher'][1]
+if ENV == 'Reacher':
+    NUM_JOINTS=2
+    LINK_LENGTH=[200, 140]
+    INI_JOING_ANGLES=[0.1, 0.1]
+    # NUM_JOINTS=4
+    # LINK_LENGTH=[200, 140, 80, 50]
+    # INI_JOING_ANGLES=[0.1, 0.1, 0.1, 0.1]
+    SCREEN_SIZE=1000
+    SPARSE_REWARD=False
+    SCREEN_SHOT=False
+    action_range = 10.0
+
+    env=Reacher(screen_size=SCREEN_SIZE, num_joints=NUM_JOINTS, link_lengths = LINK_LENGTH, \
+    ini_joint_angles=INI_JOING_ANGLES, target_pos = [369,430], render=True, change_goal=False)
+    action_dim = env.num_actions
+    state_dim  = env.num_observations
+elif ENV == 'Pendulum':
+    env = NormalizedActions(gym.make("Pendulum-v0"))
+    action_dim = env.action_space.shape[0]
+    state_dim  = env.observation_space.shape[0]
+    action_range=1.
+
+sac_trainer=SAC_Trainer(replay_buffer, hidden_dim=hidden_dim, action_range=action_range  )
 # training loop
 while frame_idx < max_frames:
-    state = env.reset(SCREEN_SHOT)
-    if NORM_OBS:
-        state = state/SCREEN_SIZE
+    if ENV == 'Reacher':
+        state = env.reset(SCREEN_SHOT)
+    elif ENV == 'Pendulum':
+        state =  env.reset()
     episode_reward = 0
     predict_q = 0
     
@@ -366,13 +352,13 @@ while frame_idx < max_frames:
     for step in range(max_steps):
         if frame_idx > explore_steps:
             action = sac_trainer.policy_net.get_action(state, deterministic = DETERMINISTIC)
-        # action = sac_trainer.policy_net.get_action(state)
         else:
             action = sac_trainer.policy_net.sample_action()
-        print('action: ', action)
-        next_state, reward, done, _ = env.step(action, SPARSE_REWARD, SCREEN_SHOT)
-        if NORM_OBS:
-            next_state=next_state/SCREEN_SIZE
+        if ENV ==  'Reacher':
+            next_state, reward, done, _ = env.step(action, SPARSE_REWARD, SCREEN_SHOT)
+        elif ENV ==  'Pendulum':
+            next_state, reward, done, _ = env.step(action)        
+            
         replay_buffer.push(state, action, reward, next_state, done)
         
         state = next_state
@@ -383,7 +369,6 @@ while frame_idx < max_frames:
         if len(replay_buffer) > batch_size:
             for i in range(update_itr):
                 predict_q=sac_trainer.update(batch_size, reward_scale=10., auto_entropy=AUTO_ENTROPY, target_entropy=-1.*action_dim)
-            print('update')
         
         if frame_idx % batch_size == 0:
             plot(frame_idx, rewards, predict_qs)

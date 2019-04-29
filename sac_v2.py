@@ -1,6 +1,8 @@
 '''
 Soft Actor-Critic version 2
 using target Q instead of V net: 2 Q net, 2 target Q net, 1 policy net
+add alpha loss compared with version 1
+paper: https://arxiv.org/pdf/1812.05905.pdf
 '''
 
 

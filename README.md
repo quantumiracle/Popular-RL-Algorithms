@@ -1,6 +1,6 @@
 # State-of-the-art Model-free Reinforcement Learning Algorithms 
 
-PyTorch implemented state-of-the-art model-free reinforcement learning algorithms on both Openai gym environments and a self-implemented Reacher environment (any number of joints or link lengths or target positions). 
+PyTorch implemented state-of-the-art model-free reinforcement learning algorithms on both Openai gym environments and a self-implemented Reacher environment. 
 
 Two versions of SAC are implemented.
 

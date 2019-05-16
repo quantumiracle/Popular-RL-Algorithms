@@ -271,9 +271,9 @@ def update(batch_size, reward_scale, gamma=0.99,soft_tau=1e-2):
     policy_loss.backward()
     policy_optimizer.step()
     
-    print('value_loss: ', value_loss)
-    print('q loss: ', q_value_loss1, q_value_loss2)
-    print('policy loss: ', policy_loss )
+    # print('value_loss: ', value_loss)
+    # print('q loss: ', q_value_loss1, q_value_loss2)
+    # print('policy loss: ', policy_loss )
 
 
 # Soft update the target value net
@@ -283,27 +283,32 @@ def update(batch_size, reward_scale, gamma=0.99,soft_tau=1e-2):
         )
     return predicted_new_q_value.mean()
 
-# intialization
-# NUM_JOINTS=4
-# LINK_LENGTH=[200, 140, 80, 50]
-# INI_JOING_ANGLES=[0.1, 0.1, 0.1, 0.1]
-NUM_JOINTS=2
-LINK_LENGTH=[200, 140]
-INI_JOING_ANGLES=[0.1, 0.1]
-SCREEN_SIZE=1000
-SPARSE_REWARD=False
-SCREEN_SHOT=False
+
+
 DETERMINISTIC=False
-ENV = ['Pendulum', 'Reacher'][1]
+
+# choose env
+ENV = ['Pendulum', 'Reacher'][0]
 if ENV == 'Reacher':
+    # intialization
+    # NUM_JOINTS=4
+    # LINK_LENGTH=[200, 140, 80, 50]
+    # INI_JOING_ANGLES=[0.1, 0.1, 0.1, 0.1]
+    NUM_JOINTS=2
+    LINK_LENGTH=[200, 140]
+    INI_JOING_ANGLES=[0.1, 0.1]
+    SCREEN_SIZE=1000
+    SPARSE_REWARD=False
+    SCREEN_SHOT=False
     env=Reacher(screen_size=SCREEN_SIZE, num_joints=NUM_JOINTS, link_lengths = LINK_LENGTH, \
-    ini_joint_angles=INI_JOING_ANGLES, target_pos = [369,430], render=True, , change_goal=False)
+    ini_joint_angles=INI_JOING_ANGLES, target_pos = [369,430], render=True,  change_goal=False)
     action_dim = env.num_actions
     state_dim  = env.num_observations
 elif ENV == 'Pendulum':
     env = NormalizedActions(gym.make("Pendulum-v0"))
     action_dim = env.action_space.shape[0]
     state_dim  = env.observation_space.shape[0]
+
 hidden_dim = 512
 
 value_net        = ValueNetwork(state_dim, hidden_dim, activation=F.relu).to(device)
@@ -341,7 +346,7 @@ replay_buffer = ReplayBuffer(replay_buffer_size)
 
 # hyper-parameters
 max_frames  = 40000
-max_steps   = 20
+max_steps   = 20 if ENV ==  'Reacher' else 150  # Pendulum needs 150 steps per episode to learn well, cannot handle 20
 frame_idx   = 0
 batch_size  = 128
 explore_steps = 0
@@ -369,13 +374,13 @@ while frame_idx < max_frames:
             next_state, reward, done, _ = env.step(action, SPARSE_REWARD, SCREEN_SHOT)
         elif ENV ==  'Pendulum':
             next_state, reward, done, _ = env.step(action)
+            env.render()
 
         replay_buffer.push(state, action, reward, next_state, done)
         
         state = next_state
         episode_reward += reward
         frame_idx += 1
-        print(frame_idx)
         
         if len(replay_buffer) > batch_size:
             predict_q=update(batch_size, reward_scale)
@@ -385,6 +390,6 @@ while frame_idx < max_frames:
         
         if done:
             break
-        
+    print('Episode: ', frame_idx/max_steps, '| Episode Reward: ', episode_reward)
     rewards.append(episode_reward)
     predict_qs.append(predict_q)

@@ -1,7 +1,8 @@
 '''
 Actor-Critic, actually Advantage Actor-Critic (A2C).
+
 Policy loss in Vanilla Actor-Critic is: -log_prob(a)*Q(s,a) ,
-in A2C is: -log_prob(a)*[Q(s,a)-V(s)], while Adv(s,a)=Q(s,a)-V(s)=r+gamma*V(s')-V(s)=TD_error ,
+Policy loss in A2C is: -log_prob(a)*[Q(s,a)-V(s)], while Adv(s,a)=Q(s,a)-V(s)=r+gamma*V(s')-V(s)=TD_error ,
 and in this implementation we provide another approach that the V(s') is replaced by R(s'), 
 which is derived from the rewards in the episode for on-policy update without evaluation. 
 

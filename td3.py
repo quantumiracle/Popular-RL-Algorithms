@@ -297,8 +297,8 @@ class TD3_Trainer():
             policy_loss.backward()
             self.policy_optimizer.step()
             
-            print('q loss: ', q_value_loss1, q_value_loss2)
-            print('policy loss: ', policy_loss )
+            # print('q loss: ', q_value_loss1, q_value_loss2)
+            # print('policy loss: ', policy_loss )
         
         # Soft update the target nets
             self.target_q_net1=self.target_soft_update(self.q_net1, self.target_q_net1, soft_tau)
@@ -321,8 +321,8 @@ def plot(frame_idx, rewards, predict_qs):
 
 
 
-
-ENV = ['Pendulum', 'Reacher'][1]
+# choose env
+ENV = ['Pendulum', 'Reacher'][0]
 if ENV == 'Reacher':
     NUM_JOINTS=2
     LINK_LENGTH=[200, 140]
@@ -353,7 +353,7 @@ replay_buffer = ReplayBuffer(replay_buffer_size)
 
 # hyper-parameters for RL training
 max_frames  = 40000
-max_steps   = 20
+max_steps   = 20 if ENV ==  'Reacher' else 150  # Pendulum needs 150 steps per episode to learn well, cannot handle 20
 frame_idx   = 0
 batch_size  = 64
 explore_steps = 500  # for random action sampling in the beginning of training
@@ -383,13 +383,14 @@ while frame_idx < max_frames:
         if ENV ==  'Reacher':
             next_state, reward, done, _ = env.step(action, SPARSE_REWARD, SCREEN_SHOT)
         elif ENV ==  'Pendulum':
-            next_state, reward, done, _ = env.step(action)  
+            next_state, reward, done, _ = env.step(action) 
+            env.render()
+
         replay_buffer.push(state, action, reward, next_state, done)
         
         state = next_state
         episode_reward += reward
         frame_idx += 1
-        print(frame_idx)
         
         if len(replay_buffer) > batch_size:
             for i in range(update_itr):
@@ -400,6 +401,6 @@ while frame_idx < max_frames:
         
         if done:
             break
-        
+    print('Episode: ', frame_idx/max_steps, '| Episode Reward: ', episode_reward)
     rewards.append(episode_reward)
     predict_qs.append(predict_q)

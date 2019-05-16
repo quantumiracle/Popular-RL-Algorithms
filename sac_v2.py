@@ -253,7 +253,7 @@ class SAC_Trainer():
         # alpha = 0.0  # trade-off between exploration (max entropy) and exploitation (max Q) 
         if auto_entropy is True:
             alpha_loss = -(self.log_alpha * (log_prob + target_entropy).detach()).mean()
-            print('alpha loss: ',alpha_loss)
+            # print('alpha loss: ',alpha_loss)
             self.alpha_optimizer.zero_grad()
             alpha_loss.backward()
             self.alpha_optimizer.step()
@@ -284,8 +284,8 @@ class SAC_Trainer():
         policy_loss.backward()
         self.policy_optimizer.step()
         
-        print('q loss: ', q_value_loss1, q_value_loss2)
-        print('policy loss: ', policy_loss )
+        # print('q loss: ', q_value_loss1, q_value_loss2)
+        # print('policy loss: ', policy_loss )
 
 
     # Soft update the target value net
@@ -303,21 +303,8 @@ class SAC_Trainer():
 replay_buffer_size = 1e6
 replay_buffer = ReplayBuffer(replay_buffer_size)
 
-
-# hyper-parameters for RL training
-max_frames  = 40000
-max_steps   = 20
-frame_idx   = 0
-batch_size  = 256
-explore_steps = 200  # for random action sampling in the beginning of training
-update_itr = 1
-AUTO_ENTROPY=True
-DETERMINISTIC=False
-hidden_dim = 512
-rewards     = []
-predict_qs  = []
-
-ENV = ['Pendulum', 'Reacher'][1]
+# choose env
+ENV = ['Pendulum', 'Reacher'][0]
 if ENV == 'Reacher':
     NUM_JOINTS=2
     LINK_LENGTH=[200, 140]
@@ -340,6 +327,21 @@ elif ENV == 'Pendulum':
     state_dim  = env.observation_space.shape[0]
     action_range=1.
 
+
+# hyper-parameters for RL training
+max_frames  = 40000
+max_steps   = 20 if ENV ==  'Reacher' else 150  # Pendulum needs 150 steps per episode to learn well, cannot handle 20
+frame_idx   = 0
+batch_size  = 256
+explore_steps = 200  # for random action sampling in the beginning of training
+update_itr = 1
+AUTO_ENTROPY=True
+DETERMINISTIC=False
+hidden_dim = 512
+rewards     = []
+predict_qs  = []
+
+
 sac_trainer=SAC_Trainer(replay_buffer, hidden_dim=hidden_dim, action_range=action_range  )
 # training loop
 while frame_idx < max_frames:
@@ -359,14 +361,15 @@ while frame_idx < max_frames:
         if ENV ==  'Reacher':
             next_state, reward, done, _ = env.step(action, SPARSE_REWARD, SCREEN_SHOT)
         elif ENV ==  'Pendulum':
-            next_state, reward, done, _ = env.step(action)        
+            next_state, reward, done, _ = env.step(action)
+            env.render()       
             
         replay_buffer.push(state, action, reward, next_state, done)
         
         state = next_state
         episode_reward += reward
         frame_idx += 1
-        print(frame_idx)
+        
         
         if len(replay_buffer) > batch_size:
             for i in range(update_itr):
@@ -377,6 +380,6 @@ while frame_idx < max_frames:
         
         if done:
             break
-        
+    print('Episode: ', frame_idx/max_steps, '| Episode Reward: ', episode_reward)
     rewards.append(episode_reward)
     predict_qs.append(predict_q)

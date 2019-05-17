@@ -40,7 +40,8 @@ Two versions of **SAC** are implemented.
 <p align="center">
 <img src="https://github.com/quantumiracle/STOA-RL-Algorithms/blob/master/ac_cartpole.png" width="100%">
 </p>
-        However, vanilla AC/A2C cannot handle the continuous case like gym Pendulum-v0 well.
+
+   However, vanilla AC/A2C cannot handle the continuous case like gym Pendulum-v0 well.
 
 
 * Both two versions of **SAC** seem to have better performance, compared with **TD3**.

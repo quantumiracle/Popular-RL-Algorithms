@@ -43,7 +43,7 @@ else:
     device = torch.device("cpu")
 print(device)
 
-DISCRETE = False # discrete actions if ture, else continuous
+DISCRETE = True # discrete actions if ture, else continuous
 DETERMINISTIC = False # deterministic actions if true, like DDPG or DQN's argmax, else non-deterministic (sampling)
 if DISCRETE:
     # each output node corresponds to one possible action, 
@@ -88,7 +88,10 @@ class ReplayBuffer:
 class ActorNetwork(nn.Module):
     def __init__(self, input_dim, output_dim, hidden_dim, init_w=3e-3):
         super(ActorNetwork, self).__init__()
-        
+
+        self.saved_logprobs = [] # this is critical! have to save the values inside the model to keep track of its gradients
+        self.saved_entropies = []
+
         self.linear1 = nn.Linear(input_dim, hidden_dim)
         self.linear2 = nn.Linear(hidden_dim, hidden_dim)
         
@@ -193,13 +196,17 @@ class ActorNetwork(nn.Module):
             
             log_prob = Normal(mean, std).log_prob(mean+ std*z.to(device)) - torch.log(1. - action0.pow(2) + self.epsilon) -  np.log(self.action_range)            
             log_prob = log_prob.sum(dim=1, keepdim=True)
-            print('mean: ', mean, 'log_std: ', log_std)
+            # print('mean: ', mean, 'log_std: ', log_std)
             # return action.item(), log_prob, z, mean, log_std
             return action.detach().cpu().numpy().squeeze(0), log_prob.squeeze(0), Normal(mean, std).entropy().mean()
 
 class CriticNetwork(nn.Module):
     def __init__(self, input_dim, hidden_dim, init_w=3e-3):
         super(CriticNetwork, self).__init__()
+
+        self.saved_values = [] # this is critical! have to save the values inside the model to keep track of its gradients
+        self.saved_nextvalues = []
+    
         
         self.linear1 = nn.Linear(input_dim, hidden_dim)
         self.linear2 = nn.Linear(hidden_dim, hidden_dim)
@@ -216,26 +223,28 @@ class CriticNetwork(nn.Module):
         return x
 
 
-class QNetwork(nn.Module):
-    def __init__(self, input_dim, hidden_dim, init_w=3e-3):
-        super(QNetwork, self).__init__()
+# class QNetwork(nn.Module):
+#     def __init__(self, input_dim, hidden_dim, init_w=3e-3):
+#         super(QNetwork, self).__init__()
         
-        self.linear1 = nn.Linear(input_dim, hidden_dim)
-        self.linear2 = nn.Linear(hidden_dim, hidden_dim)
-        self.linear3 = nn.Linear(hidden_dim, 1)
+#         self.linear1 = nn.Linear(input_dim, hidden_dim)
+#         self.linear2 = nn.Linear(hidden_dim, hidden_dim)
+#         self.linear3 = nn.Linear(hidden_dim, 1)
         
-        self.linear3.weight.data.uniform_(-init_w, init_w)
-        self.linear3.bias.data.uniform_(-init_w, init_w)
+#         self.linear3.weight.data.uniform_(-init_w, init_w)
+#         self.linear3.bias.data.uniform_(-init_w, init_w)
         
-    def forward(self, state, action):
-        x = torch.cat([state, action], 1) # the dim 0 is number of samples
-        x = F.relu(self.linear1(x))
-        x = F.relu(self.linear2(x))
-        x = self.linear3(x)
-        return x
+#     def forward(self, state, action):
+#         x = torch.cat([state, action], 1) # the dim 0 is number of samples
+#         x = F.relu(self.linear1(x))
+#         x = F.relu(self.linear2(x))
+#         x = self.linear3(x)
+#         return x
 
-def Update0( tuples, rewards, entropies, gamma=0.99, entropy_lambda=1e-3): 
-    ''' update with R(s') instead of V(s') in the TD-error'''
+def Update0(rewards, gamma=0.99, entropy_lambda=1e-3): 
+    ''' update with R(s') instead of V(s') in the TD-error;
+        with entropy boosting exploration
+    '''
     # print('sets: ', actions)
     # print('rewards: ', rewards)
     R = 0
@@ -251,32 +260,36 @@ def Update0( tuples, rewards, entropies, gamma=0.99, entropy_lambda=1e-3):
     rewards_ = (rewards_ - rewards_.mean()) / (rewards_.std() + eps)
     # print('rewards: ', rewards)
     # print('rewards_: ', rewards_)
-    for (log_prob, value), r in zip(tuples, rewards_):
+    for log_prob, value, r in zip(actor_net.saved_logprobs, critic_net.saved_values, rewards_):
         value_losses.append(F.smooth_l1_loss(value, torch.tensor([r]).to(device)))
-        reward = r - value.detach().item() # value gradients flow only through the critic
-        policy_losses.append(-log_prob * reward)
+        td_error = r - value.detach().item() # value gradients flow only through the critic
+        policy_losses.append(-log_prob * td_error)
     # print('policy losses: ', policy_losses)
     # print('value losses: ', value_losses)
     actor_optimizer.zero_grad()
-    policy_loss=torch.stack(policy_losses).sum() - entropy_lambda * entropies
+    policy_loss=torch.stack(policy_losses).sum() - entropy_lambda * torch.stack(actor_net.saved_entropies).sum()
     policy_loss.backward()
     actor_optimizer.step()
     critic_optimizer.zero_grad()
     value_loss=torch.stack(value_losses).sum()
     value_loss.backward()
-    print('loss: ', policy_loss, value_loss)
+    # print('loss: ', policy_loss, value_loss)
     critic_optimizer.step()
+    del actor_net.saved_logprobs[:]
+    del critic_net.saved_values[:]
+    del actor_net.saved_entropies[:]
 
 
 
-def Update1( tuples, rewards, gamma=0.99): 
+
+def Update1(rewards, gamma=0.99): 
     ''' update with V(s') in the TD-error'''
     policy_losses = []
     value_losses = []
     value_criterion  = nn.MSELoss()
 
     rewards = torch.tensor(rewards).to(device)
-    for (log_prob, state_value, next_state_value), r in zip(tuples, rewards):
+    for log_prob, state_value, next_state_value, r in zip(actor_net.saved_logprobs, critic_net.saved_values, critic_net.saved_nextvalues, rewards):
         # value_losses.append(F.smooth_l1_loss(state_value, r + gamma * next_state_value.detach_())) # detach the next_state_value, only BP through state_value
         value_losses.append(value_criterion(state_value, r + gamma * next_state_value.detach_()))
         state_value.detach_() # detach in place
@@ -290,8 +303,33 @@ def Update1( tuples, rewards, gamma=0.99):
     critic_optimizer.zero_grad()
     value_loss=torch.stack(value_losses).sum()
     value_loss.backward()
-    print('loss: ', policy_loss, value_loss)
+    # print('loss: ', policy_loss, value_loss)
     critic_optimizer.step()
+    del actor_net.saved_logprobs[:]
+    del critic_net.saved_values[:]
+    del critic_net.saved_nextvalues[:]
+
+
+
+class NormalizedActions(gym.ActionWrapper): # gym env wrapper
+    def _action(self, action):
+        low  = self.action_space.low
+        high = self.action_space.high
+        
+        action = low + (action + 1.0) * 0.5 * (high - low)
+        action = np.clip(action, low, high)
+        
+        return action
+
+    def _reverse_action(self, action):
+        low  = self.action_space.low
+        high = self.action_space.high
+        
+        action = 2 * (action - low) / (high - low) - 1
+        action = np.clip(action, low, high)
+        
+        return action
+
 
 def plot(frame_idx, rewards):
     clear_output(True)
@@ -304,47 +342,80 @@ def plot(frame_idx, rewards):
     # plt.show()
 
 
-NUM_JOINTS=2
-LINK_LENGTH=[200, 140]
-INI_JOING_ANGLES=[0.1, 0.1]
-SCREEN_SIZE=1000
-SPARSE_REWARD=False
-SCREEN_SHOT=False
-NORM_OBS=True
 ON_POLICY=True
-UPDATE=['Approach0', 'Approach1'][0]
-env=Reacher(screen_size=SCREEN_SIZE, num_joints=NUM_JOINTS, link_lengths = LINK_LENGTH, \
-ini_joint_angles=INI_JOING_ANGLES, target_pos = [669,430], render=True)
-action_dim = env.num_actions
-state_dim  = env.num_observations
-hidden_dim = 512
+hidden_dim = 30   
+UPDATE=['Approach0', 'Approach1'][1]
+# choose env
+ENV = ['Pendulum-v0', 'CartPole-v0', 'Reacher'][0]  # Pendulum is continuous, CartPole is discrete
+if ENV == 'Reacher':
+    DISCRETE = False
+    hidden_dim = 512
+    NUM_JOINTS=2
+    LINK_LENGTH=[200, 140]
+    INI_JOING_ANGLES=[0.1, 0.1]
+    # NUM_JOINTS=4
+    # LINK_LENGTH=[200, 140, 80, 50]
+    # INI_JOING_ANGLES=[0.1, 0.1, 0.1, 0.1]
+    SCREEN_SIZE=1000
+    SPARSE_REWARD=False
+    SCREEN_SHOT=False
+    action_range = 10.0
+
+    env=Reacher(screen_size=SCREEN_SIZE, num_joints=NUM_JOINTS, link_lengths = LINK_LENGTH, \
+    ini_joint_angles=INI_JOING_ANGLES, target_pos = [369,430], render=True, change_goal=False)
+    action_dim = env.num_actions
+    state_dim  = env.num_observations
+else: # gym env
+    if ENV == 'CartPole-v0':
+        DISCRETE = True
+        hidden_dim = 30
+    elif ENV == 'Pendulum-v0':
+        DISCRETE = False
+        hidden_dim = 128
+    if DISCRETE:
+        env = gym.make(ENV)  # discrete env no normalizedactions
+        action_dim = env.action_space.n
+    else:
+        env = NormalizedActions(gym.make(ENV))
+        action_dim = env.action_space.shape[0]
+    state_dim  = env.observation_space.shape[0]
+    action_range=1.
+
 
 actor_net = ActorNetwork(state_dim, action_dim, hidden_dim).to(device)
 critic_net = CriticNetwork(state_dim, hidden_dim).to(device)
 print('Actor Network: ', actor_net)
 print('Critic Network: ', critic_net)
-actor_optimizer = optim.Adam(actor_net.parameters(), lr=3e-4)
-critic_optimizer = optim.Adam(critic_net.parameters(), lr=3e-4)
+actor_optimizer = optim.Adam(actor_net.parameters(), lr=1e-3)
+critic_optimizer = optim.Adam(critic_net.parameters(), lr=1e-2)
 
 def train():
     # hyper-parameters
-    max_episodes  = 400
-    max_steps   = 100
+    max_episodes  = 3000
+    if ENV ==  'Reacher':
+        max_steps   = 20
+    elif ENV == 'Pendulum-v0': 
+        max_steps   = 150  # Pendulum needs 150 steps per episode to learn well, cannot handle 20
+    elif ENV == 'CartPole-v0':
+        max_steps   = 1000 # short time step would be too easy for CartPole
+
     frame_idx   = 0
+    running_reward = 10
     episode_rewards = []
-    SavedTuple = namedtuple('SavedSet', ['log_prob', 'state_value'])
-    SavedTuple2 = namedtuple('SavedSet2', ['log_prob', 'state_value', 'next_state_value'])
+    # SavedTuple = namedtuple('SavedSet', ['log_prob', 'state_value'])
+    # SavedTuple2 = namedtuple('SavedSet2', ['log_prob', 'state_value', 'next_state_value'])
 
 
     for i_episode in range (max_episodes):
         
-        state = env.reset(SCREEN_SHOT)
-        if NORM_OBS:
-            state=state/SCREEN_SIZE
+        if ENV == 'Reacher':
+            state = env.reset(SCREEN_SHOT)
+        # elif ENV == 'Pendulum':
+        else: # gym env
+            state =  env.reset()
         episode_reward = 0
         if ON_POLICY:
             rewards=[]
-            SavedSet=[]
         if not DETERMINISTIC:
             entropies=0
         for step in range (max_steps):
@@ -353,32 +424,53 @@ def train():
                 action, log_prob, entropy = actor_net.evaluate_action(state)
                 # print('state: ', state, 'action: ', action, 'log_prob: ', log_prob)
                 state_value = critic_net(state)
-                next_state, reward, done, _ = env.step(action, SPARSE_REWARD, SCREEN_SHOT)
+
+                if ENV ==  'Reacher':
+                    next_state, reward, done, _ = env.step(action, SPARSE_REWARD, SCREEN_SHOT)
+                # elif ENV ==  'Pendulum':
+                else: # gym env
+                    if DISCRETE:
+                        next_state, reward, done, _ = env.step(action[0]) # discrete action only needs a index
+                    else:
+                        next_state, reward, done, _ = env.step(action)
+                    env.render()   
                 next_state_value = critic_net(next_state)
+                actor_net.saved_entropies.append(entropy)
                 if UPDATE == 'Approach0':
-                    SavedSet.append(SavedTuple(log_prob, state_value))
+                    # this is critical! have to save the values inside the model to keep track of its gradients
+                    actor_net.saved_logprobs.append(log_prob)
+                    critic_net.saved_values.append(state_value)
+                    # SavedSet.append(SavedTuple(log_prob, state_value))
                 if UPDATE == 'Approach1':
-                    SavedSet.append(SavedTuple2(log_prob, state_value, next_state_value))
-                if NORM_OBS:
-                    next_state=state/SCREEN_SIZE
+                    # this is critical! have to save the values inside the model to keep track of its gradients
+                    actor_net.saved_logprobs.append(log_prob)
+                    critic_net.saved_values.append(state_value)
+                    critic_net.saved_nextvalues.append(next_state_value)
+                    # SavedSet.append(SavedTuple2(log_prob, state_value, next_state_value))
+                if done:
+                    reward = -20 if ENV == 'CartPole-v0' else reward
+                    break
                 rewards.append(reward)
-                entropies += entropy
             else: # off-policy update with memory buffer
                 pass
-
+                if done:
+                    reward = -20 if ENV == 'CartPole-v0' else reward
+                    break
 
             state = next_state
             episode_reward += reward
-            rewards.append(episode_reward)
+            running_reward = running_reward * 0.99 + episode_reward * 0.01
+            # rewards.append(episode_reward)
             if frame_idx%500==0:
                 plot(frame_idx, episode_rewards)
-            if done:
-                break
+
+
+        print('Episode: ', i_episode, '| Episode Reward: ', episode_reward, '| Running Reward: ', running_reward)
         episode_rewards.append(episode_reward)
         if UPDATE == 'Approach0':
-            Update0(SavedSet, rewards, entropies)
+            Update0(rewards)
         if UPDATE == 'Approach1':
-            Update1(SavedSet, rewards)
+            Update1(rewards)
 
 def main():
     train()

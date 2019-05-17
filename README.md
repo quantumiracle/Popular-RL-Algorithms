@@ -25,5 +25,12 @@ TD3: Twin Delayed DDPG.
 
 PPO:
 
-Actor-Critic:
+Actor-Critic (AC) / A2C:
 
+* `ac.py`: extensible AC/A2C, easy to change to be DDPG, etc.
+
+  A very extensible version of vanilla AC/A2C, supporting for all continuous/discrete deterministic/non-deterministic cases.
+
+
+## Usage:
+`python ***.py`

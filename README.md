@@ -5,6 +5,8 @@
 
 [Here](https://github.com/tensorlayer/tensorlayer/tree/reinforcement-learning/examples/reinforcement_learning) is my **Tensorflow 2.0 + Tensorlayer 2.0** implementation. 
 
+## Contents:
+
 Two versions of **SAC** are implemented.
 
 **SAC Version 1**:

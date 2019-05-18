@@ -225,6 +225,7 @@ def update(batch_size, reward_scale, gamma=0.99,soft_tau=1e-2):
     new_action, log_prob, z, mean, log_std = policy_net.evaluate(state)
 
     reward = reward_scale*(reward - reward.mean(dim=0)) /reward.std(dim=0) # normalize with batch mean and std
+
 # Training Q Function
     target_value = target_value_net(next_state)
     target_q_value = reward + (1 - done) * gamma * target_value # if done==1, only reward

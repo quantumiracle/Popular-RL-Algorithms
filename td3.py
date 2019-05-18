@@ -160,7 +160,7 @@ class PolicyNetwork(nn.Module):
     
     def evaluate(self, state, deterministic, eval_noise_scale, epsilon=1e-6):
         '''
-        generate sampled action with state as input wrt the policy network;
+        generate action with state as input wrt the policy network, for calculating gradients
         '''
         mean, log_std = self.forward(state)
         std = log_std.exp() # no clip in evaluation, clip affects gradients flow
@@ -174,7 +174,6 @@ class PolicyNetwork(nn.Module):
         # the Normal.log_prob outputs the same dim of input features instead of 1 dim probability, 
         # needs sum up across the features dim to get 1 dim prob; or else use Multivariate Normal.
         log_prob = log_prob.sum(dim=1, keepdim=True)
-
         ''' add noise '''
         eval_noise_clip = 2*eval_noise_scale
         noise = normal.sample(action.shape) * eval_noise_scale
@@ -188,6 +187,9 @@ class PolicyNetwork(nn.Module):
         
     
     def get_action(self, state, deterministic, explore_noise_scale):
+        '''
+        generate action for interaction with env
+        '''
         state = torch.FloatTensor(state).unsqueeze(0).to(device)
         mean, log_std = self.forward(state)
         std = log_std.exp()
@@ -267,7 +269,6 @@ class TD3_Trainer():
         new_next_action, _, _, _, _ = self.target_policy_net.evaluate(next_state, deterministic, eval_noise_scale=eval_noise_scale) # clipped normal noise
 
         reward = reward_scale * (reward - reward.mean(dim=0)) /reward.std(dim=0) # normalize with batch mean and std
-
     # Training Q Function
         target_q_min = torch.min(self.target_q_net1(next_state, new_next_action),self.target_q_net2(next_state, new_next_action))
 
@@ -275,7 +276,6 @@ class TD3_Trainer():
 
         q_value_loss1 = ((predicted_q_value1 - target_q_value.detach())**2).mean()  # detach: no gradients for the variable
         q_value_loss2 = ((predicted_q_value2 - target_q_value.detach())**2).mean()
-
         self.q_optimizer1.zero_grad()
         q_value_loss1.backward()
         self.q_optimizer1.step()
@@ -358,9 +358,9 @@ frame_idx   = 0
 batch_size  = 64
 explore_steps = 500  # for random action sampling in the beginning of training
 update_itr = 1
-hidden_dim = 128
+hidden_dim = 512
 policy_target_update_interval = 3 # delayed update for the policy network and target networks
-DETERMINISTIC=False
+DETERMINISTIC=True  # DDPG: deterministic policy gradient
 rewards     = []
 predict_qs  = []
 td3_trainer=TD3_Trainer(replay_buffer, hidden_dim=hidden_dim, policy_target_update_interval=policy_target_update_interval, action_range=action_range )

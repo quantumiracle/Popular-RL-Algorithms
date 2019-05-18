@@ -36,12 +36,36 @@ Two versions of **SAC** are implemented.
 `python ***.py`
 
 ## Performance:
+* **SAC** for gym Pendulum-v0:
+
+SAC with automatically updating variable alpha for entropy:
+<p align="center">
+<img src="https://github.com/quantumiracle/STOA-RL-Algorithms/blob/master/img/sac_autoentropy.png" width="100%">
+</p>
+SAC without automatically updating variable alpha for entropy:
+<p align="center">
+<img src="https://github.com/quantumiracle/STOA-RL-Algorithms/blob/master/img/sac_nonautoentropy.png" width="100%">
+</p>
+
+It shows that the automatic-entropy update helps the agent to learn faster.
+
+* **TD3** for gym Pendulum-v0:
+
+TD3 with deterministic policy:
+<p align="center">
+<img src="https://github.com/quantumiracle/STOA-RL-Algorithms/blob/master/img/td3_deterministic.png" width="100%">
+</p>
+TD3 with non-deterministic/stochastic policy:
+<p align="center">
+<img src="https://github.com/quantumiracle/STOA-RL-Algorithms/blob/master/img/td3_nondeterministic.png" width="100%">
+</p>
+
+It seems TD3 with deterministic policy works a little better, but basically similar.
+
 * **AC** for gym CartPole-v0:
 <p align="center">
-<img src="https://github.com/quantumiracle/STOA-RL-Algorithms/blob/master/ac_cartpole.png" width="100%">
+<img src="https://github.com/quantumiracle/STOA-RL-Algorithms/blob/master/img/ac_cartpole.png" width="100%">
 </p>
 
    However, vanilla AC/A2C cannot handle the continuous case like gym Pendulum-v0 well.
 
-
-* Both two versions of **SAC** seem to have better performance, compared with **TD3**.

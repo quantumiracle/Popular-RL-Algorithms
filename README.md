@@ -6,6 +6,7 @@
 Algorithms include Soft Actor-Critic (SAC), Twin Delayed DDPG (TD3), Actor-Critic (AC/A2C), Proximal Policy Optimization (PPO), etc.
 
 This repo only contains **PyTorch** Implementation.
+
 [Here](https://github.com/tensorlayer/tensorlayer/tree/reinforcement-learning/examples/reinforcement_learning) is my **Tensorflow 2.0 + Tensorlayer 2.0** implementation. 
 
 ## Contents:
@@ -31,6 +32,7 @@ This repo only contains **PyTorch** Implementation.
    paper: https://arxiv.org/pdf/1802.09477.pdf
 
 * **Proximal Policy Optimization (PPO)**:
+  Todo
 * **Actor-Critic (AC) / A2C**:
 
   `ac.py`: extensible AC/A2C, easy to change to be DDPG, etc.

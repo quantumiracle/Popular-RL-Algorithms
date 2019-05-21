@@ -1,13 +1,15 @@
 # State-of-the-art Model-free Reinforcement Learning Algorithms  [![Tweet](https://img.shields.io/twitter/url/http/shields.io.svg?style=social)](https://twitter.com/intent/tweet?text=State-of-the-art-Model-free-Reinforcement-Learning-Algorithms%20&url=hhttps://github.com/quantumiracle/STOA-RL-Algorithms&hashtags=RL)
 
 
-**PyTorch** implementation of state-of-the-art model-free reinforcement learning algorithms on both Openai gym environments and a self-implemented Reacher environment. Algorithms include Soft Actor-Critic (SAC), Twin Delayed DDPG (TD3), Actor-Critic (AC/A2C), Proximal Policy Optimization (PPO), etc.
+**PyTorch** and **Tensorflow 2.0** implementation of state-of-the-art model-free reinforcement learning algorithms on both Openai gym environments and a self-implemented Reacher environment. 
+
+Algorithms include Soft Actor-Critic (SAC), Twin Delayed DDPG (TD3), Actor-Critic (AC/A2C), Proximal Policy Optimization (PPO), etc.
 
 [Here](https://github.com/tensorlayer/tensorlayer/tree/reinforcement-learning/examples/reinforcement_learning) is my **Tensorflow 2.0 + Tensorlayer 2.0** implementation. 
 
 ## Contents:
 
-Two versions of **SAC** are implemented.
+Two versions of **Soft Actor-Critic (SAC)** are implemented.
 
 **SAC Version 1**:
 
@@ -21,13 +23,13 @@ Two versions of **SAC** are implemented.
 
   paper: https://arxiv.org/pdf/1812.05905.pdf
 
-**TD3: Twin Delayed DDPG**:
+**Twin Delayed DDPG (TD3)**:
 
 * `td3.py`:
 
   paper: https://arxiv.org/pdf/1802.09477.pdf
 
-**PPO**:
+**Proximal Policy Optimization (PPO)**:
 
 **Actor-Critic (AC) / A2C**:
 

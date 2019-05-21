@@ -10,33 +10,32 @@ This repo only contains **PyTorch** Implementation.
 
 ## Contents:
 
-Two versions of **Soft Actor-Critic (SAC)** are implemented.
+* Two versions of **Soft Actor-Critic (SAC)** are implemented.
+  
+  **SAC Version 1**:
 
-**SAC Version 1**:
+     `sac.py`: using state-value function.
 
-* `sac.py`: using state-value function.
+     paper: https://arxiv.org/pdf/1801.01290.pdf
 
-  paper: https://arxiv.org/pdf/1801.01290.pdf
+  **SAC Version 2**:
 
-**SAC Version 2**:
+   `sac_v2.py`: using target Q-value function instead of state-value function.
 
-* `sac_v2.py`: using target Q-value function instead of state-value function.
+    paper: https://arxiv.org/pdf/1812.05905.pdf
 
-  paper: https://arxiv.org/pdf/1812.05905.pdf
+* **Twin Delayed DDPG (TD3)**:
 
-**Twin Delayed DDPG (TD3)**:
+   `td3.py`: implementation of TD3.
 
-* `td3.py`:
+   paper: https://arxiv.org/pdf/1802.09477.pdf
 
-  paper: https://arxiv.org/pdf/1802.09477.pdf
+* **Proximal Policy Optimization (PPO)**:
+* **Actor-Critic (AC) / A2C**:
 
-**Proximal Policy Optimization (PPO)**:
+  `ac.py`: extensible AC/A2C, easy to change to be DDPG, etc.
 
-**Actor-Critic (AC) / A2C**:
-
-* `ac.py`: extensible AC/A2C, easy to change to be DDPG, etc.
-
-  A very extensible version of vanilla AC/A2C, supporting for all continuous/discrete deterministic/non-deterministic cases.
+   A very extensible version of vanilla AC/A2C, supporting for all continuous/discrete deterministic/non-deterministic cases.
 
 
 ## Usage:

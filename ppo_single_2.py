@@ -54,8 +54,8 @@ class PPO(object):
         self.tfadv = tf.placeholder(tf.float32, [None, 1], 'advantage')
         with tf.variable_scope('loss'):
             with tf.variable_scope('surrogate'):
-                # ratio = tf.exp(pi.log_prob(self.tfa) - oldpi.log_prob(self.tfa))
-                ratio = pi.prob(self.tfa) / oldpi.prob(self.tfa)
+                ratio = tf.exp(pi.log_prob(self.tfa) - oldpi.log_prob(self.tfa))
+                # ratio = pi.prob(self.tfa) / (oldpi.prob(self.tfa)+1e-6)  # avoid the numerical problem: NAN
                 surr = ratio * self.tfadv
             if METHOD['name'] == 'kl_pen':
                 self.tflam = tf.placeholder(tf.float32, None, 'lambda')
@@ -155,14 +155,12 @@ if args.train:
 
     for ep in range(EP_MAX):
         s = env.reset(SCREEN_SHOT)
-        s=s/100.
         buffer_s, buffer_a, buffer_r = [], [], []
         ep_r = 0
         for t in range(EP_LEN):    # in one episode
             # env.render()
             a = ppo.choose_action(s)
             s_, r, done, distance2goal = env.step(a, SPARSE_REWARD, SCREEN_SHOT)
-            s_=s_/100.
             buffer_s.append(s)
             buffer_a.append(a)
             # print('r, norm_r: ', r, (r+8)/8)
@@ -205,13 +203,11 @@ if args.test:
     for ep in range(EP_MAX):
         print('Episode: ', ep)
         s = env.reset()
-        s=s/100. # scale the inputs
         buffer_s, buffer_a, buffer_r = [], [], []
         ep_r = 0
         for t in range(EP_LEN):    # in one episode
             a = ppo.choose_action(s)
             s_, r, done = env.step(a)
-            s_=s_/100.
             buffer_s.append(s)
             buffer_a.append(a)
             # print('r, norm_r: ', r, (r+8)/8)

@@ -248,7 +248,7 @@ class SAC_Trainer():
         new_action, log_prob, z, mean, log_std = self.policy_net.evaluate(state)
         new_next_action, next_log_prob, _, _, _ = self.policy_net.evaluate(next_state)
 
-        reward = reward_scale * (reward - reward.mean(dim=0)) /reward.std(dim=0) # normalize with batch mean and std
+        reward = reward_scale * (reward - reward.mean(dim=0)) / (reward.std(dim=0) + 1e-6) # normalize with batch mean and std; plus a small number to prevent numerical problem
     # Updating alpha wrt entropy
         # alpha = 0.0  # trade-off between exploration (max entropy) and exploitation (max Q) 
         if auto_entropy is True:

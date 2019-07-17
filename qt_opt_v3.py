@@ -49,23 +49,7 @@ if GPU:
 else:
     device = torch.device("cpu")
 print(device)
-# ''' discrete or not depends on env '''
-# DISCRETE = False # discrete actions if ture, else continuous
-# ''' deterministic or not depends on algorithm '''
-# DETERMINISTIC = False # deterministic actions if true, like DDPG or DQN's argmax, else non-deterministic (sampling)
-# if DISCRETE:
-#     # each output node corresponds to one possible action, 
-#     # the output dim = possible action values (only one action)
-#     pass
-# else: 
-#     # the output dim = dim of action
-#     pass
-# if DETERMINISTIC:
-#     # no need of sampling, directly output actions
-#     pass
-# else:
-#     # output the mean and (log-)variance for Gaussian prior, then sampling 
-#     pass
+
 
 class ReplayBuffer:
     def __init__(self, capacity):
@@ -121,7 +105,8 @@ class CEM():
         self.std = ini_std_scale*np.ones(self.theta_dim)
         
     def sample(self):
-        theta = self.mean + np.random.randn(self.theta_dim) * self.std
+        # theta = self.mean + np.random.randn(self.theta_dim) * self.std
+        theta = self.mean + np.random.normal(size=self.theta_dim) * self.std
         return theta
 
     def sample_multi(self, n):

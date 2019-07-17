@@ -137,8 +137,9 @@ class PPO(object):
         saver.save(self.sess, path)
 
     def load(self, path):
-            saver=tf.train.Saver()
-            saver.restore(self.sess, path)
+        saver=tf.train.Saver()
+        saver.restore(self.sess, path)
+        
 NUM_JOINTS=2
 LINK_LENGTH=[200, 140]
 INI_JOING_ANGLES=[0.1, 0.1]

@@ -24,6 +24,9 @@ from matplotlib import animation
 from IPython.display import display
 from reacher import Reacher
 
+import argparse
+import time
+
 GPU = True
 device_idx = 0
 if GPU:
@@ -31,6 +34,13 @@ if GPU:
 else:
     device = torch.device("cpu")
 print(device)
+
+
+parser = argparse.ArgumentParser(description='Train or test neural net motor controller.')
+parser.add_argument('--train', dest='train', action='store_true', default=False)
+parser.add_argument('--test', dest='test', action='store_true', default=False)
+
+args = parser.parse_args()
 
 
 class ReplayBuffer:
@@ -78,14 +88,6 @@ class NormalizedActions(gym.ActionWrapper):
         
         return action
 
-def plot(frame_idx, rewards, predict_qs):
-    clear_output(True)
-    plt.figure(figsize=(20,5))
-    plt.title('frame %s. reward: %s' % (frame_idx, rewards[-1]))
-    plt.plot(rewards)
-    plt.plot(predict_qs)
-    plt.savefig('sac_v2.png')
-    # plt.show()
 
 class ValueNetwork(nn.Module):
     def __init__(self, state_dim, hidden_dim, init_w=3e-3):
@@ -298,6 +300,28 @@ class SAC_Trainer():
             )
         return predicted_new_q_value.mean()
 
+    def save_model(self, path):
+        torch.save(self.soft_q_net1.state_dict(), path+'_q1')
+        torch.save(self.soft_q_net2.state_dict(), path+'_q2')
+        torch.save(self.policy_net.state_dict(), path+'_policy')
+
+    def load_model(self, path):
+        self.soft_q_net1.load_state_dict(torch.load(path+'_q1'))
+        self.soft_q_net2.load_state_dict(torch.load(path+'_q2'))
+        self.policy_net.load_state_dict(torch.load(path+'_policy'))
+
+        self.soft_q_net1.eval()
+        self.soft_q_net2.eval()
+        self.policy_net.eval()
+
+
+def plot(rewards):
+    clear_output(True)
+    plt.figure(figsize=(20,5))
+    plt.plot(rewards)
+    plt.savefig('sac_v2.png')
+    # plt.show()
+
 
 replay_buffer_size = 1e6
 replay_buffer = ReplayBuffer(replay_buffer_size)
@@ -328,7 +352,7 @@ elif ENV == 'Pendulum':
 
 
 # hyper-parameters for RL training
-max_frames  = 40000
+max_episodes  = 1000
 max_steps   = 20 if ENV ==  'Reacher' else 150  # Pendulum needs 150 steps per episode to learn well, cannot handle 20
 frame_idx   = 0
 batch_size  = 256
@@ -338,47 +362,72 @@ AUTO_ENTROPY=True
 DETERMINISTIC=False
 hidden_dim = 512
 rewards     = []
-predict_qs  = []
-
+model_path = './model/sac_v2'
 
 sac_trainer=SAC_Trainer(replay_buffer, hidden_dim=hidden_dim, action_range=action_range  )
-# training loop
-while frame_idx < max_frames:
-    if ENV == 'Reacher':
-        state = env.reset(SCREEN_SHOT)
-    elif ENV == 'Pendulum':
-        state =  env.reset()
-    episode_reward = 0
-    predict_q = 0
-    
-    
-    for step in range(max_steps):
-        if frame_idx > explore_steps:
-            action = sac_trainer.policy_net.get_action(state, deterministic = DETERMINISTIC)
-        else:
-            action = sac_trainer.policy_net.sample_action()
-        if ENV ==  'Reacher':
-            next_state, reward, done, _ = env.step(action, SPARSE_REWARD, SCREEN_SHOT)
-        elif ENV ==  'Pendulum':
-            next_state, reward, done, _ = env.step(action)
-            env.render()       
+
+if __name__ == '__main__':
+    if args.train:
+        # training loop
+        for eps in range(max_episodes):
+            if ENV == 'Reacher':
+                state = env.reset(SCREEN_SHOT)
+            elif ENV == 'Pendulum':
+                state =  env.reset()
+            episode_reward = 0
             
-        replay_buffer.push(state, action, reward, next_state, done)
-        
-        state = next_state
-        episode_reward += reward
-        frame_idx += 1
-        
-        
-        if len(replay_buffer) > batch_size:
-            for i in range(update_itr):
-                predict_q=sac_trainer.update(batch_size, reward_scale=10., auto_entropy=AUTO_ENTROPY, target_entropy=-1.*action_dim)
-        
-        if frame_idx % batch_size == 0:
-            plot(frame_idx, rewards, predict_qs)
-        
-        if done:
-            break
-    print('Episode: ', frame_idx/max_steps, '| Episode Reward: ', episode_reward)
-    rewards.append(episode_reward)
-    predict_qs.append(predict_q)
+            
+            for step in range(max_steps):
+                if frame_idx > explore_steps:
+                    action = sac_trainer.policy_net.get_action(state, deterministic = DETERMINISTIC)
+                else:
+                    action = sac_trainer.policy_net.sample_action()
+                if ENV ==  'Reacher':
+                    next_state, reward, done, _ = env.step(action, SPARSE_REWARD, SCREEN_SHOT)
+                elif ENV ==  'Pendulum':
+                    next_state, reward, done, _ = env.step(action)
+                    env.render()       
+                    
+                replay_buffer.push(state, action, reward, next_state, done)
+                
+                state = next_state
+                episode_reward += reward
+                frame_idx += 1
+                
+                
+                if len(replay_buffer) > batch_size:
+                    for i in range(update_itr):
+                        _=sac_trainer.update(batch_size, reward_scale=10., auto_entropy=AUTO_ENTROPY, target_entropy=-1.*action_dim)
+
+                if done:
+                    break
+
+            if eps % 20 == 0 and eps>0: # plot and model saving interval
+                plot(rewards)
+                sac_trainer.save_model(model_path)
+            print('Episode: ', eps, '| Episode Reward: ', episode_reward)
+            rewards.append(episode_reward)
+        sac_trainer.save_model(model_path)
+
+    if args.test:
+        sac_trainer.load_model(model_path)
+        for eps in range(10):
+            if ENV == 'Reacher':
+                state = env.reset(SCREEN_SHOT)
+            elif ENV == 'Pendulum':
+                state =  env.reset()
+            episode_reward = 0
+
+            for step in range(max_steps):
+                action = sac_trainer.policy_net.get_action(state, deterministic = DETERMINISTIC)
+                if ENV ==  'Reacher':
+                    next_state, reward, done, _ = env.step(action, SPARSE_REWARD, SCREEN_SHOT)
+                elif ENV ==  'Pendulum':
+                    next_state, reward, done, _ = env.step(action)
+                    env.render()   
+
+
+                episode_reward += reward
+                state=next_state
+
+            print('Episode: ', eps, '| Episode Reward: ', episode_reward)

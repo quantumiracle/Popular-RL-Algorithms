@@ -23,6 +23,9 @@ from matplotlib import animation
 from IPython.display import display
 from reacher import Reacher
 
+import argparse
+import time
+
 
 GPU = True
 device_idx = 0
@@ -31,6 +34,13 @@ if GPU:
 else:
     device = torch.device("cpu")
 print(device)
+
+
+parser = argparse.ArgumentParser(description='Train or test neural net motor controller.')
+parser.add_argument('--train', dest='train', action='store_true', default=False)
+parser.add_argument('--test', dest='test', action='store_true', default=False)
+
+args = parser.parse_args()
 
 
 class ReplayBuffer:
@@ -77,14 +87,6 @@ class NormalizedActions(gym.ActionWrapper):
         action = np.clip(action, low, high)
         
         return action
-
-def plot(frame_idx, rewards, predict_qs):
-    clear_output(True)
-    plt.figure(figsize=(20,5))
-    plt.title('frame %s. reward: %s' % (frame_idx, rewards[-1]))
-    plt.plot(rewards)
-    plt.savefig('sac.png')
-    # plt.show()
 
 class ValueNetwork(nn.Module):
     def __init__(self, state_dim, hidden_dim, activation=F.relu, init_w=3e-3):
@@ -207,6 +209,7 @@ class PolicyNetwork(nn.Module):
         a=torch.FloatTensor(self.num_actions).uniform_(-1, 1)
         return (self.action_range*a).numpy()
 
+
 def update(batch_size, reward_scale, gamma=0.99,soft_tau=1e-2):
     alpha = 1.0  # trade-off between exploration (max entropy) and exploitation (max Q)
     
@@ -285,6 +288,13 @@ def update(batch_size, reward_scale, gamma=0.99,soft_tau=1e-2):
     return predicted_new_q_value.mean()
 
 
+def plot(rewards):
+    clear_output(True)
+    plt.figure(figsize=(20,5))
+    plt.plot(rewards)
+    plt.savefig('sac.png')
+    # plt.show()
+
 
 DETERMINISTIC=False
 
@@ -346,51 +356,80 @@ replay_buffer = ReplayBuffer(replay_buffer_size)
 
 
 # hyper-parameters
-max_frames  = 40000
+max_episodes  = 1000
 max_steps   = 20 if ENV ==  'Reacher' else 150  # Pendulum needs 150 steps per episode to learn well, cannot handle 20
 frame_idx   = 0
 batch_size  = 128
 explore_steps = 0
 rewards     = []
-predict_qs  = []
 reward_scale=10.0
+model_path = './model/sac'
 
-# training loop
-while frame_idx < max_frames:
-    if ENV == 'Reacher':
-        state = env.reset(SCREEN_SHOT)
-    elif ENV == 'Pendulum':
-        state =  env.reset()
 
-    episode_reward = 0
-    predict_q = 0
-    
-    
-    for step in range(max_steps):
-        if frame_idx >= explore_steps:
-            action = policy_net.get_action(state, deterministic=DETERMINISTIC)
-        else:
-            action = policy_net.sample_action()
-        if ENV ==  'Reacher':
-            next_state, reward, done, _ = env.step(action, SPARSE_REWARD, SCREEN_SHOT)
-        elif ENV ==  'Pendulum':
-            next_state, reward, done, _ = env.step(action)
-            env.render()
+if __name__ == '__main__':
+    if args.train:
+        policy_net.load_state_dict(torch.load(model_path))
+        # training loop
+        for eps in range(max_episodes):
+            if ENV == 'Reacher':
+                state = env.reset(SCREEN_SHOT)
+            elif ENV == 'Pendulum':
+                state =  env.reset()
 
-        replay_buffer.push(state, action, reward, next_state, done)
-        
-        state = next_state
-        episode_reward += reward
-        frame_idx += 1
-        
-        if len(replay_buffer) > batch_size:
-            predict_q=update(batch_size, reward_scale)
-        
-        if frame_idx % 500 == 0:
-            plot(frame_idx, rewards, predict_qs)
-        
-        if done:
-            break
-    print('Episode: ', frame_idx/max_steps, '| Episode Reward: ', episode_reward)
-    rewards.append(episode_reward)
-    predict_qs.append(predict_q)
+            episode_reward = 0
+            
+            
+            for step in range(max_steps):
+                if frame_idx >= explore_steps:
+                    action = policy_net.get_action(state, deterministic=DETERMINISTIC)
+                else:
+                    action = policy_net.sample_action()
+                if ENV ==  'Reacher':
+                    next_state, reward, done, _ = env.step(action, SPARSE_REWARD, SCREEN_SHOT)
+                elif ENV ==  'Pendulum':
+                    next_state, reward, done, _ = env.step(action)
+                    env.render()
+
+                replay_buffer.push(state, action, reward, next_state, done)
+                
+                state = next_state
+                episode_reward += reward
+                frame_idx += 1
+                
+                if len(replay_buffer) > batch_size:
+                    _=update(batch_size, reward_scale)
+                
+                if done:
+                    break
+
+            if eps % 20 == 0 and eps>0:
+                plot(rewards)
+                torch.save(policy_net.state_dict(), model_path)
+
+            print('Episode: ', eps, '| Episode Reward: ', episode_reward)
+            rewards.append(episode_reward)
+        torch.save(policy_net.state_dict(), model_path) 
+
+
+    if args.test:
+        policy_net.load_state_dict(torch.load(model_path))
+        policy_net.eval()
+        for eps in range(10):
+            if ENV == 'Reacher':
+                state = env.reset(SCREEN_SHOT)
+            elif ENV == 'Pendulum':
+                state =  env.reset()
+            episode_reward = 0
+
+            for step in range(max_steps):
+                action = policy_net.get_action(state, deterministic = DETERMINISTIC)
+                if ENV ==  'Reacher':
+                    next_state, reward, done, _ = env.step(action, SPARSE_REWARD, SCREEN_SHOT)
+                elif ENV ==  'Pendulum':
+                    next_state, reward, done, _ = env.step(action)
+                    env.render() 
+
+                episode_reward += reward
+                state=next_state
+
+            print('Episode: ', eps, '| Episode Reward: ', episode_reward)

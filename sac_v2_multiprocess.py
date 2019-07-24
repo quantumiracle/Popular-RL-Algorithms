@@ -13,7 +13,7 @@ import gym
 import numpy as np
 
 import torch
-torch.multiprocessing.set_start_method('forkserver', force=True)
+torch.multiprocessing.set_start_method('forkserver', force=True) # critical for make multiprocessing work
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
@@ -440,6 +440,7 @@ if __name__ == '__main__':
     replay_buffer_size = 1e6
     # replay_buffer = ReplayBuffer(replay_buffer_size)
 
+    # the replay buffer is a class, have to use torch manager to make it a proxy for sharing across processes
     BaseManager.register('ReplayBuffer', ReplayBuffer)
     manager = BaseManager()
     manager.start()
@@ -451,10 +452,6 @@ if __name__ == '__main__':
     if ENV == 'Reacher':
         NUM_JOINTS=2
         LINK_LENGTH=[200, 140]
-        INI_JOING_ANGLES=[0.1, 0.1]
-        # NUM_JOINTS=4
-        # LINK_LENGTH=[200, 140, 80, 50]
-        # INI_JOING_ANGLES=[0.1, 0.1, 0.1, 0.1]
         SCREEN_SIZE=1000
         SPARSE_REWARD=False
         SCREEN_SHOT=False
@@ -471,7 +468,7 @@ if __name__ == '__main__':
         state_dim  = env.observation_space.shape[0]
         action_range=1.
 
-    # hyper-parameters for RL training
+    # hyper-parameters for RL training, no need for sharing across processes
     max_episodes  = 1000
     max_steps   = 20 if ENV ==  'Reacher' else 150  # Pendulum needs 150 steps per episode to learn well, cannot handle 20
     batch_size  = 128
@@ -480,7 +477,7 @@ if __name__ == '__main__':
     AUTO_ENTROPY=True
     DETERMINISTIC=False
     hidden_dim = 512
-    model_path = './model/sac_v2'
+    model_path = './model/sac_v2_multi'
 
     sac_trainer=SAC_Trainer(replay_buffer, hidden_dim=hidden_dim, action_range=action_range )
 
@@ -491,14 +488,14 @@ if __name__ == '__main__':
         sac_trainer.soft_q_net2.share_memory()
         sac_trainer.target_soft_q_net1.share_memory()
         sac_trainer.target_soft_q_net2.share_memory()
-        sac_trainer.policy_net.share_memory()
-        sac_trainer.log_alpha.share_memory_()
+        sac_trainer.policy_net.share_memory()  # model
+        sac_trainer.log_alpha.share_memory_()  # variable
         ShareParameters(sac_trainer.soft_q_optimizer1)
         ShareParameters(sac_trainer.soft_q_optimizer2)
         ShareParameters(sac_trainer.policy_optimizer)
         ShareParameters(sac_trainer.alpha_optimizer)
 
-        rewards_queue=mp.Queue()
+        rewards_queue=mp.Queue()  # used for get rewards from all processes and plot the curve
 
         num_workers=2  # or: mp.cpu_count()
         processes=[]
@@ -506,12 +503,12 @@ if __name__ == '__main__':
 
         for i in range(num_workers):
             process = Process(target=worker, args=(i, sac_trainer, ENV, rewards_queue, replay_buffer, max_episodes, max_steps, batch_size, explore_steps, \
-            update_itr, AUTO_ENTROPY, DETERMINISTIC, hidden_dim, model_path))
+            update_itr, AUTO_ENTROPY, DETERMINISTIC, hidden_dim, model_path))  # the args contain shared and not shared
             process.daemon=True  # all processes closed when the main stops
             processes.append(process)
 
         [p.start() for p in processes]
-        while True:
+        while True:  # keep geting the episode reward from the queue
             r = rewards_queue.get()
             if r is not None:
                 rewards.append(r)
@@ -525,25 +522,26 @@ if __name__ == '__main__':
 
         sac_trainer.save_model(model_path)
 
-    # if args.test:
-    #     sac_trainer.load_model(model_path)
-    #     for eps in range(10):
-    #         if ENV == 'Reacher':
-    #             state = env.reset(SCREEN_SHOT)
-    #         elif ENV == 'Pendulum':
-    #             state =  env.reset()
-    #         episode_reward = 0
+    if args.test:
+        # single process for testing
+        sac_trainer.load_model(model_path)
+        for eps in range(10):
+            if ENV == 'Reacher':
+                state = env.reset(SCREEN_SHOT)
+            elif ENV == 'Pendulum':
+                state =  env.reset()
+            episode_reward = 0
 
-    #         for step in range(max_steps):
-    #             action = sac_trainer.policy_net.get_action(state, deterministic = DETERMINISTIC)
-    #             if ENV ==  'Reacher':
-    #                 next_state, reward, done, _ = env.step(action, SPARSE_REWARD, SCREEN_SHOT)
-    #             elif ENV ==  'Pendulum':
-    #                 next_state, reward, done, _ = env.step(action)
-    #                 env.render()   
+            for step in range(max_steps):
+                action = sac_trainer.policy_net.get_action(state, deterministic = DETERMINISTIC)
+                if ENV ==  'Reacher':
+                    next_state, reward, done, _ = env.step(action, SPARSE_REWARD, SCREEN_SHOT)
+                elif ENV ==  'Pendulum':
+                    next_state, reward, done, _ = env.step(action)
+                    env.render()   
 
 
-    #             episode_reward += reward
-    #             state=next_state
+                episode_reward += reward
+                state=next_state
 
-    #         print('Episode: ', eps, '| Episode Reward: ', episode_reward)
+            print('Episode: ', eps, '| Episode Reward: ', episode_reward)

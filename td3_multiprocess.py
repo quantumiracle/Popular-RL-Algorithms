@@ -10,6 +10,7 @@ import gym
 import numpy as np
 
 import torch
+torch.multiprocessing.set_start_method('forkserver', force=True) # critical for make multiprocessing work
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
@@ -23,6 +24,12 @@ from reacher import Reacher
 
 import argparse
 import time
+
+import torch.multiprocessing as mp
+from torch.multiprocessing import Process
+
+from multiprocessing import Process, Manager
+from multiprocessing.managers import BaseManager
 
 torch.manual_seed(1234)  #Reproducibility
 
@@ -65,6 +72,10 @@ class ReplayBuffer:
         return state, action, reward, next_state, done
     
     def __len__(self):
+        return len(self.buffer)
+    
+
+    def get_length(self):
         return len(self.buffer)
 
 class NormalizedActions(gym.ActionWrapper):
@@ -332,100 +343,196 @@ class TD3_Trainer():
         self.q_net2.eval()
         self.policy_net.eval()
 
+
+def worker(id, td3_trainer, ENV, rewards_queue, replay_buffer, max_episodes, max_steps, batch_size, explore_steps, \
+            update_itr, explore_noise_scale, eval_noise_scale, reward_scale, DETERMINISTIC, hidden_dim, model_path):
+    '''
+    the function for sampling with multi-processing
+    '''
+    print(td3_trainer, replay_buffer)
+
+    if ENV == 'Reacher':
+        NUM_JOINTS=2
+        LINK_LENGTH=[200, 140]
+        INI_JOING_ANGLES=[0.1, 0.1]
+
+        SCREEN_SIZE=1000
+        SPARSE_REWARD=False
+        SCREEN_SHOT=False
+        action_range = 10.0
+
+        env=Reacher(screen_size=SCREEN_SIZE, num_joints=NUM_JOINTS, link_lengths = LINK_LENGTH, \
+        ini_joint_angles=INI_JOING_ANGLES, target_pos = [369,430], render=True, change_goal=False)
+        action_dim = env.num_actions
+        state_dim  = env.num_observations
+
+    elif ENV == 'Pendulum':
+        env = NormalizedActions(gym.make("Pendulum-v0"))
+        action_dim = env.action_space.shape[0]
+        state_dim  = env.observation_space.shape[0]
+        action_range=1.
+
+
+    # training loop
+    for eps in range(max_episodes):
+        frame_idx=0
+        rewards=[]
+        episode_reward = 0
+        if ENV == 'Reacher':
+            state = env.reset(SCREEN_SHOT)
+        elif ENV == 'Pendulum':
+            state =  env.reset()
+        
+        for step in range(max_steps):
+            if frame_idx > explore_steps:
+                action = td3_trainer.policy_net.get_action(state, deterministic = DETERMINISTIC, explore_noise_scale=explore_noise_scale)
+            else:
+                action = td3_trainer.policy_net.sample_action()
+    
+            try:
+                if ENV ==  'Reacher':
+                    next_state, reward, done, _ = env.step(action, SPARSE_REWARD, SCREEN_SHOT)
+                elif ENV ==  'Pendulum':
+                    next_state, reward, done, _ = env.step(action)
+                    env.render()   
+            except KeyboardInterrupt:
+                print('Finished')
+                td3_trainer.save_model(model_path)
+    
+            replay_buffer.push(state, action, reward, next_state, done)
+            
+            state = next_state
+            episode_reward += reward
+            frame_idx += 1
+            
+            
+            # if len(replay_buffer) > batch_size:
+            if replay_buffer.get_length() > batch_size:
+                for i in range(update_itr):
+                    _=td3_trainer.update(batch_size, deterministic=DETERMINISTIC, eval_noise_scale=eval_noise_scale, reward_scale=reward_scale)
+            
+            if eps % 10 == 0 and eps>0:
+                # plot(rewards, id)
+                td3_trainer.save_model(model_path)
+            
+            if done:
+                break
+        print('Episode: ', eps, '| Episode Reward: ', episode_reward)
+        if len(rewards) == 0: rewards.append(episode_reward)
+        else: rewards.append(rewards[-1]*0.9+episode_reward*0.1)
+        rewards_queue.put(episode_reward)
+
+    td3_trainer.save_model(model_path)
+
+def ShareParameters(adamoptim):
+    ''' share parameters of Adamoptimizers for multiprocessing '''
+    for group in adamoptim.param_groups:
+        for p in group['params']:
+            state = adamoptim.state[p]
+            # initialize: have to initialize here, or else cannot find
+            state['step'] = 0
+            state['exp_avg'] = torch.zeros_like(p.data)
+            state['exp_avg_sq'] = torch.zeros_like(p.data)
+
+            # share in memory
+            state['exp_avg'].share_memory_()
+            state['exp_avg_sq'].share_memory_()
+
 def plot(rewards):
     clear_output(True)
     plt.figure(figsize=(20,5))
     plt.plot(rewards)
-    plt.savefig('td3.png')
+    plt.savefig('td3_multi.png')
     # plt.show()
 
 
-# choose env
-ENV = ['Pendulum', 'Reacher'][0]
-if ENV == 'Reacher':
-    NUM_JOINTS=2
-    LINK_LENGTH=[200, 140]
-    INI_JOING_ANGLES=[0.1, 0.1]
-    # NUM_JOINTS=4
-    # LINK_LENGTH=[200, 140, 80, 50]
-    # INI_JOING_ANGLES=[0.1, 0.1, 0.1, 0.1]
-    SCREEN_SIZE=1000
-    SPARSE_REWARD=False
-    SCREEN_SHOT=False
-    action_range = 10.0
-
-    env=Reacher(screen_size=SCREEN_SIZE, num_joints=NUM_JOINTS, link_lengths = LINK_LENGTH, \
-    ini_joint_angles=INI_JOING_ANGLES, target_pos = [369,430], render=True, change_goal=False)
-    action_dim = env.num_actions
-    state_dim  = env.num_observations
-elif ENV == 'Pendulum':
-    env = NormalizedActions(gym.make("Pendulum-v0"))
-    action_dim = env.action_space.shape[0]
-    state_dim  = env.observation_space.shape[0]
-    action_range=1.
-
-
-
-replay_buffer_size = 5e5
-replay_buffer = ReplayBuffer(replay_buffer_size)
-
-
-# hyper-parameters for RL training
-max_episodes  = 1000
-max_steps   = 20 if ENV ==  'Reacher' else 150  # Pendulum needs 150 steps per episode to learn well, cannot handle 20
-frame_idx   = 0
-batch_size  = 64
-explore_steps = 0  # for random action sampling in the beginning of training
-update_itr = 1
-hidden_dim = 512
-policy_target_update_interval = 3 # delayed update for the policy network and target networks
-DETERMINISTIC=True  # DDPG: deterministic policy gradient
-rewards     = []
-model_path = './model/td3'
-
-td3_trainer=TD3_Trainer(replay_buffer, hidden_dim=hidden_dim, policy_target_update_interval=policy_target_update_interval, action_range=action_range )
-
 if __name__ == '__main__':
+    replay_buffer_size = 1e6
+    # replay_buffer = ReplayBuffer(replay_buffer_size)
+
+    # the replay buffer is a class, have to use torch manager to make it a proxy for sharing across processes
+    BaseManager.register('ReplayBuffer', ReplayBuffer)
+    manager = BaseManager()
+    manager.start()
+    replay_buffer = manager.ReplayBuffer(replay_buffer_size)  # share the replay buffer through manager
+
+    # choose env
+    ENV = ['Pendulum', 'Reacher'][0]
+    if ENV == 'Reacher':
+        NUM_JOINTS=2
+        LINK_LENGTH=[200, 140]
+        INI_JOING_ANGLES=[0.1, 0.1]
+        SCREEN_SIZE=1000
+        SPARSE_REWARD=False
+        SCREEN_SHOT=False
+        action_range = 10.0
+
+        env=Reacher(screen_size=SCREEN_SIZE, num_joints=NUM_JOINTS, link_lengths = LINK_LENGTH, \
+        ini_joint_angles=INI_JOING_ANGLES, target_pos = [369,430], render=True, change_goal=False)
+        action_dim = env.num_actions
+        state_dim  = env.num_observations
+    elif ENV == 'Pendulum':
+        env = NormalizedActions(gym.make("Pendulum-v0"))
+        action_dim = env.action_space.shape[0]
+        state_dim  = env.observation_space.shape[0]
+        action_range=1.
+
+
+
+    # hyper-parameters for RL training
+    max_episodes  = 1000
+    max_steps   = 20 if ENV ==  'Reacher' else 150  # Pendulum needs 150 steps per episode to learn well, cannot handle 20
+    batch_size  = 256
+    explore_steps = 0  # for random action sampling in the beginning of training
+    update_itr = 1
+    explore_noise_scale=1.0
+    eval_noise_scale=0.5
+    reward_scale = 1.0
+    hidden_dim = 512
+    policy_target_update_interval = 3 # delayed update for the policy network and target networks
+    DETERMINISTIC=True  # DDPG: deterministic policy gradient
+    model_path = './model/td3_multi'
+
+    td3_trainer=TD3_Trainer(replay_buffer, hidden_dim=hidden_dim, policy_target_update_interval=policy_target_update_interval, action_range=action_range )
+
+
     if args.train:
-        # training loop
-        for eps in range(max_episodes):
-            if ENV == 'Reacher':
-                state = env.reset(SCREEN_SHOT)
-            elif ENV == 'Pendulum':
-                state =  env.reset()
-            episode_reward = 0
-            
-            
-            for step in range(max_steps):
-                if frame_idx > explore_steps:
-                    action = td3_trainer.policy_net.get_action(state, deterministic = DETERMINISTIC, explore_noise_scale=1.0)
-                else:
-                    action = td3_trainer.policy_net.sample_action()
-                if ENV ==  'Reacher':
-                    next_state, reward, done, _ = env.step(action, SPARSE_REWARD, SCREEN_SHOT)
-                elif ENV ==  'Pendulum':
-                    next_state, reward, done, _ = env.step(action) 
-                    env.render()
 
-                replay_buffer.push(state, action, reward, next_state, done)
-                
-                state = next_state
-                episode_reward += reward
-                frame_idx += 1
-                
-                if len(replay_buffer) > batch_size:
-                    for i in range(update_itr):
-                        _=td3_trainer.update(batch_size, deterministic=DETERMINISTIC, eval_noise_scale=0.5, reward_scale=1.)
-                
-                if done:
-                    break
-              
-            if eps % 20 == 0 and eps>0:
+        td3_trainer.q_net1.share_memory()
+        td3_trainer.q_net2.share_memory()
+        td3_trainer.target_q_net1.share_memory()
+        td3_trainer.target_q_net2.share_memory()
+        td3_trainer.policy_net.share_memory()
+        td3_trainer.target_policy_net.share_memory()
+        ShareParameters(td3_trainer.q_optimizer1)
+        ShareParameters(td3_trainer.q_optimizer2)
+        ShareParameters(td3_trainer.policy_optimizer)
+
+        rewards_queue=mp.Queue()  # used for get rewards from all processes and plot the curve
+
+        num_workers=2  # or: mp.cpu_count()
+        processes=[]
+        rewards=[]
+
+        for i in range(num_workers):
+            process = Process(target=worker, args=(i, td3_trainer, ENV, rewards_queue, replay_buffer, max_episodes, max_steps, batch_size, explore_steps, \
+            update_itr, explore_noise_scale, eval_noise_scale, reward_scale, DETERMINISTIC, hidden_dim, model_path))  # the args contain shared and not shared
+            process.daemon=True  # all processes closed when the main stops
+            processes.append(process)
+
+        [p.start() for p in processes]
+        while True:  # keep geting the episode reward from the queue
+            r = rewards_queue.get()
+            if r is not None:
+                rewards.append(r)
+            else:
+                break
+
+            if len(rewards)%20==0 and len(rewards)>0:
                 plot(rewards)
-                td3_trainer.save_model(model_path)
 
-            print('Episode: ', eps, '| Episode Reward: ', episode_reward)
-            rewards.append(episode_reward)
+        [p.join() for p in processes]  # finished at the same time
+
         td3_trainer.save_model(model_path)
         
     if args.test:

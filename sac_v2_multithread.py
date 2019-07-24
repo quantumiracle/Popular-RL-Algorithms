@@ -328,7 +328,7 @@ def plot(rewards, id):
 
 def worker(id, ):  # thread could read global variables
     '''
-    the function for sampling with multi-processing
+    the function for sampling with multi-threading
     '''
 
     print(sac_trainer, replay_buffer)

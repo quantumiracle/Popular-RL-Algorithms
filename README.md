@@ -51,7 +51,12 @@ This repo only contains **PyTorch** Implementation.
 ## Usage:
 `python ***.py`
 
+## Troubleshooting:
+
+If you meet problem *"Not imlplemented Error"*, it may be due to the wrong gym version. The newest gym==0.14 won't work. Install gym==0.7 or gym==0.10 with `pip install -r requirements.txt`.
+
 ## Performance:
+
 * **SAC** for gym Pendulum-v0:
 
 SAC with automatically updating variable alpha for entropy:

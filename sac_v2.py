@@ -178,6 +178,13 @@ class PolicyNetwork(nn.Module):
         z      = normal.sample() 
         action_0 = torch.tanh(mean + std*z.to(device)) # TanhNormal distribution as actions; reparameterization trick
         action = self.action_range*action_0
+        # The log-likelihood here is for the TanhNorm distribution instead of only Gaussian distribution. \
+        # The TanhNorm forces the Gaussian with infinite action range to be finite. For the three terms in \
+        # this log-likelihood estimation: the first term is the log probability of action as in common \
+        # stochastic Gaussian action policy (without Tanh); the second term is the caused by the Tanh(), \
+        # as shown in appendix C. Enforcing Action Bounds of https://arxiv.org/pdf/1801.01290.pdf ; \
+        # the third term is caused by the action range I used in this code is not (-1, 1) but with \
+        # an arbitrary action range, which is slightly different from original paper.
         log_prob = Normal(mean, std).log_prob(mean+ std*z.to(device)) - torch.log(1. - action_0.pow(2) + epsilon) -  np.log(self.action_range)
         # both dims of normal.log_prob and -log(1-a**2) are (N,dim_of_action); 
         # the Normal.log_prob outputs the same dim of input features instead of 1 dim probability, 

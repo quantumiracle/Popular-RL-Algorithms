@@ -339,10 +339,10 @@ def worker(id, ):  # thread could read global variables
     elif ENV == 'Pendulum':
         env = NormalizedActions(gym.make("Pendulum-v0"))
     print(env)
+    frame_idx=0
+    rewards=[]
     # training loop
     for eps in range(max_episodes):
-        frame_idx=0
-        rewards=[]
         episode_reward = 0
         if ENV == 'Reacher':
             state = env.reset(SCREEN_SHOT)
@@ -383,8 +383,8 @@ def worker(id, ):  # thread could read global variables
             if done:
                 break
         print('Episode: ', eps, '| Episode Reward: ', episode_reward)
-        if len(rewards) == 0: rewards.append(episode_reward)
-        else: rewards.append(rewards[-1]*0.9+episode_reward*0.1)
+        # if len(rewards) == 0: rewards.append(episode_reward)
+        # else: rewards.append(rewards[-1]*0.9+episode_reward*0.1)
     sac_trainer.save_model(model_path)
             
 

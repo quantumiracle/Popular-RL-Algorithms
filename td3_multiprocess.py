@@ -371,12 +371,10 @@ def worker(id, td3_trainer, ENV, rewards_queue, replay_buffer, max_episodes, max
         action_dim = env.action_space.shape[0]
         state_dim  = env.observation_space.shape[0]
         action_range=1.
-
-
+    frame_idx=0
+    rewards=[]
     # training loop
     for eps in range(max_episodes):
-        frame_idx=0
-        rewards=[]
         episode_reward = 0
         if ENV == 'Reacher':
             state = env.reset(SCREEN_SHOT)
@@ -418,8 +416,8 @@ def worker(id, td3_trainer, ENV, rewards_queue, replay_buffer, max_episodes, max
             if done:
                 break
         print('Episode: ', eps, '| Episode Reward: ', episode_reward)
-        if len(rewards) == 0: rewards.append(episode_reward)
-        else: rewards.append(rewards[-1]*0.9+episode_reward*0.1)
+        # if len(rewards) == 0: rewards.append(episode_reward)
+        # else: rewards.append(rewards[-1]*0.9+episode_reward*0.1)
         rewards_queue.put(episode_reward)
 
     td3_trainer.save_model(model_path)

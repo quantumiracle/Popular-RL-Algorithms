@@ -90,3 +90,15 @@ It seems TD3 with deterministic policy works a little better, but basically simi
 
    However, vanilla AC/A2C cannot handle the continuous case like gym Pendulum-v0 well.
 
+## Citation:
+To cite this repository:
+```
+@misc{rlalgorithms,
+  author = {Zihan Ding},
+  title = {SOTA-RL-Algorithms},
+  year = {2019},
+  publisher = {GitHub},
+  journal = {GitHub repository},
+  howpublished = {\url{https://github.com/quantumiracle/SOTA-RL-Algorithms}},
+}
+```

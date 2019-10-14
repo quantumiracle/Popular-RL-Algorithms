@@ -330,7 +330,6 @@ def worker(id, ):  # thread could read global variables
     '''
     the function for sampling with multi-threading
     '''
-
     print(sac_trainer, replay_buffer)
     if ENV == 'Reacher':
         env=Reacher(screen_size=SCREEN_SIZE, num_joints=NUM_JOINTS, link_lengths = LINK_LENGTH, \

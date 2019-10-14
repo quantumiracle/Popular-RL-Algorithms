@@ -7,7 +7,7 @@ Algorithms include **Soft Actor-Critic (SAC), Twin Delayed DDPG (TD3), Actor-Cri
 
 This repo only contains **PyTorch** Implementation.
 
-[Here](https://github.com/tensorlayer/tensorlayer/tree/reinforcement-learning/examples/reinforcement_learning) is my **Tensorflow 2.0 + Tensorlayer 2.0** implementation. 
+[**Here**](https://github.com/tensorlayer/tensorlayer/tree/reinforcement-learning/examples/reinforcement_learning) is my **Tensorflow 2.0 + Tensorlayer 2.0** implementation as tutorials with simple structures. And [**Here**](https://github.com/tensorlayer/RLzoo) is a baseline implementation with high-level API supporting a variety of popular environments, also with Tensorflow 2.0 + Tensorlayer 2.0.
 
 ## Contents:
 

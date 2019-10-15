@@ -12,7 +12,7 @@ This repo only contains **PyTorch** Implementation.
 ## Contents:
 
 * Two versions of **Soft Actor-Critic (SAC)** are implemented.
-  
+
   **SAC Version 1**:
 
      `sac.py`: using state-value function.
@@ -25,6 +25,10 @@ This repo only contains **PyTorch** Implementation.
 
     paper: https://arxiv.org/pdf/1812.05905.pdf
 
+* **Deep Deterministic Policy Gradient (DDPG)**:
+
+  `ddpg.py`: implementation of DDPG.
+
 * **Twin Delayed DDPG (TD3)**:
 
    `td3.py`: implementation of TD3.
@@ -33,6 +37,7 @@ This repo only contains **PyTorch** Implementation.
 
 * **Proximal Policy Optimization (PPO)**:
   Todo
+
 * **Actor-Critic (AC) / A2C**:
 
   `ac.py`: extensible AC/A2C, easy to change to be DDPG, etc.
@@ -44,12 +49,14 @@ This repo only contains **PyTorch** Implementation.
 * **PointNet** for landmarks generation from images with unsupervised learning is implemented [here](https://github.com/quantumiracle/PointNet_Landmarks_from_Image/tree/master). This method is also used for image-based reinforcement learning as a STOA algorithm, called **Transporter**.
 
   original paper: [Unsupervised Learning of Object Landmarksthrough Conditional Image Generation](https://papers.nips.cc/paper/7657-unsupervised-learning-of-object-landmarks-through-conditional-image-generation.pdf)
-  
+
   paper for RL: [Unsupervised Learning of Object Keypointsfor Perception and Control](https://arxiv.org/pdf/1906.11883.pdf)
 
 
 ## Usage:
-`python ***.py`
+`python ***.py --train` 
+
+`python ***.py --test` 
 
 ## Troubleshooting:
 

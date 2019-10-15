@@ -89,7 +89,7 @@ class Reacher:
             pass
         return np.array(int_coordinates).reshape(-1), np.array([downsampled_array_screen])
     
-    def reset(self, screen_shot):
+    def reset(self, screen_shot=False):
         ''' reset the environment '''
         self.steps=0
         self.joint_angles = np.array(self.ini_joint_angles)*180.0/np.pi
@@ -116,7 +116,7 @@ class Reacher:
         else:
             return np.array(np.concatenate((pos_set,self.target_pos)))/self.screen_size
 
-    def step(self, action, sparse_reward, screen_shot):    
+    def step(self, action, sparse_reward=False, screen_shot=False):    
         # Get events and check if the user has closed the window
         if self.render == True:
             for event in pygame.event.get():

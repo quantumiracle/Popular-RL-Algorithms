@@ -346,7 +346,7 @@ ON_POLICY=True
 hidden_dim = 30   
 UPDATE=['Approach0', 'Approach1'][0]
 # choose env
-ENV = ['Pendulum-v0', 'CartPole-v0', 'Reacher'][0]  # Pendulum is continuous, CartPole is discrete
+ENV = ['Pendulum-v0', 'CartPole-v0', 'Reacher'][1]  # Pendulum is continuous, CartPole is discrete
 if ENV == 'Reacher':
     DISCRETE = False
     hidden_dim = 512

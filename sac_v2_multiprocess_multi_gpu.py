@@ -307,7 +307,7 @@ class PolicyNetwork(nn.Module):
         z = normal.sample().cuda()
         action = self.action_range * torch.tanh(mean + std * z)
 
-        action = self.action_range * mean.detach().cpu().numpy()[0] if deterministic else \
+        action = self.action_range * torch.tanh(mean).detach().cpu().numpy()[0] if deterministic else \
         action.detach().cpu().numpy()[0]
         return action
 

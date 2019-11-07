@@ -16,7 +16,6 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.distributions import Normal
 from torch.distributions import Categorical
-from torch.utils.tensorboard import SummaryWriter
 from collections import namedtuple
 from common.buffers import *
 from common.value_networks import *
@@ -30,7 +29,6 @@ import argparse
 from gym import spaces
 
 
-writer = SummaryWriter()
 GPU = True
 device_idx = 0
 if GPU:
@@ -282,9 +280,12 @@ if __name__ == '__main__':
             state = env.reset()
             episode_reward = 0
             last_action = np.zeros(action_space.shape[0])
-
+            hidden_out = (torch.zeros([1, 1, hidden_dim], dtype=torch.float).cuda(), \
+                torch.zeros([1, 1, hidden_dim], dtype=torch.float).cuda())  # initialize hidden state for lstm, (hidden, cell), each is (layer, batch, dim)
+            
             for step in range(max_steps):
-                action = alg.policy_net.get_action(state, last_action, noise_scale=0.0)  # no noise for testing
+                hidden_in = hidden_out
+                action, hidden_out= alg.policy_net.get_action(state, last_action, hidden_in, noise_scale=0.0)  # no noise for testing
                 next_state, reward, done, _ = env.step(action)
                 
                 state = next_state

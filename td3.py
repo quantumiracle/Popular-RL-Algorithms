@@ -374,7 +374,7 @@ replay_buffer = ReplayBuffer(replay_buffer_size)
 max_episodes  = 1000
 max_steps   = 20 if ENV ==  'Reacher' else 150  # Pendulum needs 150 steps per episode to learn well, cannot handle 20
 frame_idx   = 0
-batch_size  = 64
+batch_size  = 640
 explore_steps = 0  # for random action sampling in the beginning of training
 update_itr = 1
 hidden_dim = 512

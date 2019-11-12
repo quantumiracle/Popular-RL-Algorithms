@@ -341,7 +341,7 @@ def plot(rewards):
 
 
 # choose env
-ENV = ['Pendulum', 'Reacher'][1]
+ENV = ['Pendulum', 'Reacher'][0]
 if ENV == 'Reacher':
     NUM_JOINTS=2
     LINK_LENGTH=[200, 140]
@@ -363,7 +363,6 @@ elif ENV == 'Pendulum':
     action_dim = env.action_space.shape[0]
     state_dim  = env.observation_space.shape[0]
     action_range=1.
-
 
 
 replay_buffer_size = 5e5

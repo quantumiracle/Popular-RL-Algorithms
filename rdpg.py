@@ -269,6 +269,7 @@ if __name__ == '__main__':
                 action, hidden_out= alg.policy_net.get_action(state, last_action, hidden_in, noise_scale=0.0)  # no noise for testing
                 next_state, reward, done, _ = env.step(action)
                 
+                last_action = action
                 state = next_state
                 episode_reward += reward
                 

@@ -1,6 +1,6 @@
 '''
-Recurrent Deterministic Policy Gradient updated with batch of episodes.
-Not sure if work or not yet, seems to process very slow.
+Recurrent Deterministic Policy Gradient (DDPG with LSTM network)
+Update with batch of episodes for each time, so requires each episode has the same length.
 '''
 
 
@@ -16,11 +16,11 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.distributions import Normal
 from torch.distributions import Categorical
-from torch.utils.tensorboard import SummaryWriter
 from collections import namedtuple
 from common.buffers import *
 from common.value_networks import *
 from common.policy_networks import *
+from common.utils import *
 
 import matplotlib.pyplot as plt
 from matplotlib import animation
@@ -30,7 +30,6 @@ import argparse
 from gym import spaces
 
 
-writer = SummaryWriter()
 GPU = True
 device_idx = 0
 if GPU:
@@ -60,7 +59,7 @@ class RDPG():
         for target_param, param in zip(self.target_qnet.parameters(), self.qnet.parameters()):
             target_param.data.copy_(param.data)
         self.q_criterion = nn.MSELoss()
-        q_lr=1e-2
+        q_lr=1e-3
         policy_lr = 1e-3
         self.update_cnt=0
 
@@ -78,48 +77,31 @@ class RDPG():
 
     def update(self, batch_size, reward_scale=10.0, gamma=0.99, soft_tau=1e-2, policy_up_itr=10, target_update_delay=3, warmup=True):
         self.update_cnt+=1
-        state, action, last_action, reward, next_state, done = self.replay_buffer.sample(batch_size)
+        hidden_in, hidden_out, state, action, last_action, reward, next_state, done = self.replay_buffer.sample(batch_size)
         # print('sample:', state, action,  reward, done)
-        q_loss = 0
-        policy_loss = 0
-        epi_state      = torch.FloatTensor(state).to(device)
-        epi_next_state = torch.FloatTensor(next_state).to(device)
-        epi_action     = torch.FloatTensor(action).to(device)
-        epi_last_action     = torch.FloatTensor(last_action).to(device)
-        epi_reward     = torch.FloatTensor(reward).unsqueeze(-1).to(device)  
-        epi_done       = torch.FloatTensor(np.float32(done)).unsqueeze(-1).to(device)
+        state      = torch.FloatTensor(state).to(device)
+        next_state = torch.FloatTensor(next_state).to(device)
+        action     = torch.FloatTensor(action).to(device)
+        last_action     = torch.FloatTensor(last_action).to(device)
+        reward     = torch.FloatTensor(reward).unsqueeze(-1).to(device)  
+        done       = torch.FloatTensor(np.float32(done)).unsqueeze(-1).to(device)
 
-        pi_h_out = (torch.zeros([1, batch_size, self.hidden_dim], dtype=torch.float).cuda(), \
-                torch.zeros([1, batch_size, self.hidden_dim], dtype=torch.float).cuda())  # initialize hidden state for lstm, (hidden, cell), each is (layer, batch, dim)
-        q_h_out = (torch.zeros([1, batch_size, self.hidden_dim], dtype=torch.float).cuda(), \
-                torch.zeros([1, batch_size, self.hidden_dim], dtype=torch.float).cuda())  # initialize hidden state for lstm, (hidden, cell), each is (layer, batch, dim)
-        for i in range(len(epi_state[0])):  # iterate along the sequence length dim
-            state = epi_state[:, i].unsqueeze(1)  # [batch, 1, dim]
-            action = epi_action[:, i].unsqueeze(1)
-            last_action = epi_last_action[:, i].unsqueeze(1)
-            reward = epi_reward[:, i].unsqueeze(1)
-            next_state = epi_next_state[:, i].unsqueeze(1)
-            done = epi_done[:, i].unsqueeze(1)
+        # use hidden states stored in the memory for initialization, hidden_in for current, hidden_out for target
+        predict_q, _ = self.qnet(state, action, last_action, hidden_in) # for q 
+        new_action, _ = self.policy_net.evaluate(state, last_action, hidden_in) # for policy
+        new_next_action, _ = self.target_policy_net.evaluate(next_state, action, hidden_out)  # for q
+        predict_target_q, _ = self.target_qnet(next_state, new_next_action, action, hidden_out)  # for q
 
-            pi_h_in = pi_h_out
-            q_h_in = q_h_out
-            predict_q, q_h_out = self.qnet(state, action, last_action, q_h_in) # for q 
-            new_action, pi_h_out = self.policy_net.evaluate(state, last_action, pi_h_in) # for policy
-            piT_h_in = pi_h_out  #  target pi takes next state, so takes pi_h_out as piT_h_in
-            new_next_action, _ = self.target_policy_net.evaluate(next_state, action, piT_h_in)  # for q
-            qT_h_in = q_h_out  # target q takes next state and next action, so takes q_h_out as qT_h_in
-            predict_target_q, _ = self.target_qnet(next_state, new_next_action, action, qT_h_in)  # for q
-            
-            predict_new_q, _ = self.qnet(state, new_action, last_action, q_h_in) # for policy. as optimizers are separated, no detach for q_h_in is also fine
-            target_q = reward+(1-done)*gamma*predict_target_q # for q
-            # reward = reward_scale * (reward - reward.mean(dim=0)) /reward.std(dim=0) # normalize with batch mean and std
+        predict_new_q, _ = self.qnet(state, new_action, last_action, hidden_in) # for policy. as optimizers are separated, no detach for q_h_in is also fine
+        target_q = reward+(1-done)*gamma*predict_target_q # for q
+        # reward = reward_scale * (reward - reward.mean(dim=0)) /reward.std(dim=0) # normalize with batch mean and std
 
-            q_loss += self.q_criterion(predict_q, target_q.detach())
-            policy_loss += -torch.mean(predict_new_q)
+        q_loss = self.q_criterion(predict_q, target_q.detach())
+        policy_loss = -torch.mean(predict_new_q)
 
         # train qnet
         self.q_optimizer.zero_grad()
-        q_loss.backward(retain_graph=True)  # for BPTT
+        q_loss.backward(retain_graph=True)  # no need for retain_graph here actually
         self.q_optimizer.step()
 
         # train policy_net     
@@ -182,7 +164,7 @@ if __name__ == '__main__':
     SCREEN_SIZE=1000
     # SPARSE_REWARD=False
     # SCREEN_SHOT=False
-    ENV = ['Pendulum', 'Reacher'][0]
+    ENV = ['Pendulum', 'Reacher'][1]
     if ENV == 'Reacher':
         env=Reacher(screen_size=SCREEN_SIZE, num_joints=NUM_JOINTS, link_lengths = LINK_LENGTH, \
         ini_joint_angles=INI_JOING_ANGLES, target_pos = [369,430], render=True)
@@ -196,11 +178,11 @@ if __name__ == '__main__':
         state_space  = env.observation_space
     hidden_dim = 64
     explore_steps = 0  # for random exploration
-    batch_size = 2  # each sample in batch is an episode
-    update_itr = 1
+    batch_size = 3  # each sample in batch is an episode for lstm policy (normally it's timestep)
+    update_itr = 1  # update iteration
 
     replay_buffer_size=1e6
-    replay_buffer = ReplayBufferLSTM(replay_buffer_size)
+    replay_buffer = ReplayBufferLSTM2(replay_buffer_size)
     model_path='./model/rdpg'
     torch.autograd.set_detect_anomaly(True)
     alg = RDPG(replay_buffer, state_space, action_space, hidden_dim)
@@ -230,45 +212,39 @@ if __name__ == '__main__':
                 torch.zeros([1, 1, hidden_dim], dtype=torch.float).cuda())  # initialize hidden state for lstm, (hidden, cell), each is (layer, batch, dim)
             
             for step in range(max_steps):
-                if frame_idx > explore_steps:
-                    hidden_in = hidden_out
-                    action, hidden_out = alg.policy_net.get_action(state, last_action, hidden_in)
-                else:
-                    action = alg.policy_net.sample_action()
+                hidden_in = hidden_out
+                action, hidden_out = alg.policy_net.get_action(state, last_action, hidden_in)
+
                 next_state, reward, done, _ = env.step(action)
                 if ENV !='Reacher':
                     env.render()
-                
                 if step>0:
+                    ini_hidden_in = hidden_in
+                    ini_hidden_out = hidden_out
                     episode_state.append(state)
                     episode_action.append(action)
                     episode_last_action.append(last_action)
                     episode_reward.append(reward)
                     episode_next_state.append(next_state)
-                    episode_done.append(done)                   
-                
+                    episode_done.append(done)  
+
                 state = next_state
                 last_action = action
                 frame_idx += 1
-
                 if len(replay_buffer) > batch_size:
                     for _ in range(update_itr):
                         q_loss, policy_loss = alg.update(batch_size)
                         q_loss_list.append(q_loss)
                         policy_loss_list.append(policy_loss)
-                
                 if done:  # should not break for lstm cases to make every episode with same length
-                    break
-            replay_buffer.push(episode_state, episode_action, episode_last_action, episode_reward, episode_next_state, episode_done)
-            
+                    break        
 
             if i_episode % 20 == 0:
                 plot(rewards)
                 alg.save_model(model_path)
-            if np.average(q_loss_list) is not None:
-                print('Eps: ', i_episode, '| Reward: ', np.sum(episode_reward), '| Loss: ', np.average(q_loss_list), np.average(policy_loss_list))
-            else:
-                print('Eps: ', i_episode, '| Reward: ', np.sum(episode_reward))
+            print('Eps: ', i_episode, '| Reward: ', np.sum(episode_reward), '| Loss: ', np.average(q_loss_list), np.average(policy_loss_list))
+            replay_buffer.push(ini_hidden_in, ini_hidden_out, episode_state, episode_action, episode_last_action, \
+                episode_reward, episode_next_state, episode_done)
 
             rewards.append(np.sum(episode_reward))
             alg.save_model(model_path)
@@ -285,9 +261,12 @@ if __name__ == '__main__':
             state = env.reset()
             episode_reward = 0
             last_action = np.zeros(action_space.shape[0])
-
+            hidden_out = (torch.zeros([1, 1, hidden_dim], dtype=torch.float).cuda(), \
+                torch.zeros([1, 1, hidden_dim], dtype=torch.float).cuda())  # initialize hidden state for lstm, (hidden, cell), each is (layer, batch, dim)
+            
             for step in range(max_steps):
-                action = alg.policy_net.get_action(state, last_action, noise_scale=0.0)  # no noise for testing
+                hidden_in = hidden_out
+                action, hidden_out= alg.policy_net.get_action(state, last_action, hidden_in, noise_scale=0.0)  # no noise for testing
                 next_state, reward, done, _ = env.step(action)
                 
                 state = next_state

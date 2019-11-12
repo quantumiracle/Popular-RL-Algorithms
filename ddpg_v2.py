@@ -216,6 +216,7 @@ if __name__ == '__main__':
                 
                 if done:
                     break
+
             if i_episode % 20 == 0:
                 plot(rewards)
                 alg.save_model(model_path)

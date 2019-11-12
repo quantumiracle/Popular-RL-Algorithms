@@ -341,7 +341,7 @@ def plot(rewards):
 
 
 # choose env
-ENV = ['Pendulum', 'Reacher'][0]
+ENV = ['Pendulum', 'Reacher'][1]
 if ENV == 'Reacher':
     NUM_JOINTS=2
     LINK_LENGTH=[200, 140]

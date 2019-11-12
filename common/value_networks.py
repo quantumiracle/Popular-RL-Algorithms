@@ -69,10 +69,10 @@ class QNetwork(QNetworkBase):
         x = self.linear4(x)
         return x        
 
-
 class QNetworkLSTM(QNetworkBase):
     def __init__(self, state_space, action_space, hidden_dim, activation=F.relu, output_activation=None):
         super().__init__(state_space, action_space, activation)
+        self.hidden_dim = hidden_dim
 
         self.linear1 = nn.Linear(self._state_dim+self._action_dim, hidden_dim)
         self.linear2 = nn.Linear(self._state_dim+self._action_dim, hidden_dim)

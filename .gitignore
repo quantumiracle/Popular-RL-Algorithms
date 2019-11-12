@@ -1,4 +1,7 @@
 runs
 model
+test
 rdpg_batch.py
 rdpg_noTarget.py
+*.png
+

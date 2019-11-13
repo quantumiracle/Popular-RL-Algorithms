@@ -3,7 +3,7 @@
 
 **PyTorch** and **Tensorflow 2.0** implementation of state-of-the-art model-free reinforcement learning algorithms on both Openai gym environments and a self-implemented Reacher environment. 
 
-Algorithms include **Soft Actor-Critic (SAC), Deep Deterministic Policy Gradient (DDPG), Twin Delayed DDPG (TD3), Actor-Critic (AC/A2C), Proximal Policy Optimization (PPO), QT-Opt (including Cross-entropy (CE) Method)**, **PointNet**, **Transporter**, etc.
+Algorithms include **Soft Actor-Critic (SAC), Deep Deterministic Policy Gradient (DDPG), Twin Delayed DDPG (TD3), Actor-Critic (AC/A2C), Proximal Policy Optimization (PPO), QT-Opt (including Cross-entropy (CE) Method)**, **PointNet**, **Transporter**, **Recurrent Policy Gradient**, etc.
 
 This repo only contains **PyTorch** Implementation.
 
@@ -52,6 +52,19 @@ This repo only contains **PyTorch** Implementation.
 
   paper for RL: [Unsupervised Learning of Object Keypointsfor Perception and Control](https://arxiv.org/pdf/1906.11883.pdf)
 
+* **Recurrent Policy Gradient**:
+
+  `rdpg.py`: DDPG with LSTM policy.
+
+  `td3_lstm.py`: TD3 with LSTM policy.
+
+  `sac_v2_lstm.py`: SAC with LSTM policy.
+
+  References:
+
+  [Memory-based control with recurrent neural networks](https://arxiv.org/abs/1512.04455)
+
+  [Sim-to-Real Transfer of Robotic Control with Dynamics Randomization](https://arxiv.org/abs/1710.06537)
 
 ## Usage:
 `python ***.py --train` 

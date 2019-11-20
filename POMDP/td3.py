@@ -7,6 +7,7 @@ import math
 import random
 
 import gym
+from gym_pomdp_wrappers import MuJoCoHistoryEnv
 import numpy as np
 
 import torch
@@ -19,7 +20,6 @@ from IPython.display import clear_output
 import matplotlib.pyplot as plt
 from matplotlib import animation
 from IPython.display import display
-from reacher import Reacher
 
 import argparse
 import time
@@ -306,6 +306,9 @@ class TD3_Trainer():
             self.policy_optimizer.zero_grad()
             policy_loss.backward()
             self.policy_optimizer.step()
+            
+            # print('q loss: ', q_value_loss1, q_value_loss2)
+            # print('policy loss: ', policy_loss )
         
         # Soft update the target nets
             self.target_q_net1=self.target_soft_update(self.q_net1, self.target_q_net1, soft_tau)
@@ -338,29 +341,14 @@ def plot(rewards):
 
 
 # choose env
-ENV = ['Reacher', 'Pendulum-v0', 'HalfCheetah-v2'][1]
-if ENV == 'Reacher':
-    NUM_JOINTS=2
-    LINK_LENGTH=[200, 140]
-    INI_JOING_ANGLES=[0.1, 0.1]
-    SCREEN_SIZE=1000
-    SPARSE_REWARD=False
-    SCREEN_SHOT=False
-    action_range = 10.0
-
-    env=Reacher(screen_size=SCREEN_SIZE, num_joints=NUM_JOINTS, link_lengths = LINK_LENGTH, \
-    ini_joint_angles=INI_JOING_ANGLES, target_pos = [369,430], render=True, change_goal=False)
-    action_dim = env.num_actions
-    state_dim  = env.num_observations
-else:
-    env = NormalizedActions(gym.make(ENV))
-    action_dim = env.action_space.shape[0]
-    state_dim  = env.observation_space.shape[0]
-    action_range=1.
+ENV = 'HalfCheetah-v2'
+env = NormalizedActions(MuJoCoHistoryEnv(ENV, hist_len=0, history_type="pomdp"))
+action_dim = env.action_space.shape[0]
+state_dim  = env.observation_space.shape[0]
+action_range=1.
 
 replay_buffer_size = 5e5
 replay_buffer = ReplayBuffer(replay_buffer_size)
-
 
 # hyper-parameters for RL training
 max_episodes  = 1000
@@ -370,10 +358,10 @@ batch_size  = 300
 explore_steps = 0  # for random action sampling in the beginning of training
 update_itr = 1
 hidden_dim = 512
-policy_target_update_interval = 3 # delayed update for the policy network and target networks
+policy_target_update_interval = 10 # delayed update for the policy network and target networks
 DETERMINISTIC=True  # DDPG: deterministic policy gradient
-explore_noise_scale = 0.5  # 0.5 noise is required for Pendulum-v0, 0.1 noise for HalfCheetah-v2
-eval_noise_scale = 0.5
+explore_noise_scale = 0.1
+eval_noise_scale = 0.1
 reward_scale = 1.
 rewards     = []
 model_path = './model/td3'

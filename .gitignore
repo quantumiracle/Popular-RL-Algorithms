@@ -5,4 +5,8 @@ rdpg_batch.py
 rdpg_noTarget.py
 ramble_sac.md
 *.png
+*.npy
+POMDP/model
+POMDP/gym-pomdp-wrappers
+
 

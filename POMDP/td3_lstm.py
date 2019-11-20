@@ -7,6 +7,7 @@ import math
 import random
 
 import gym
+from gym_pomdp_wrappers import MuJoCoHistoryEnv
 import numpy as np
 
 import torch
@@ -22,7 +23,6 @@ from IPython.display import clear_output
 import matplotlib.pyplot as plt
 from matplotlib import animation
 from IPython.display import display
-from reacher import Reacher
 import gym.spaces as spaces
 
 import argparse
@@ -119,6 +119,7 @@ class TD3_Trainer():
         predicted_q_value2, _ = self.q_net2(state, action, last_action, hidden_in)
         new_action,  _= self.policy_net.evaluate(state, last_action, hidden_in, noise_scale=0.0)  # no noise, deterministic policy gradients
         new_next_action, _ = self.target_policy_net.evaluate(next_state, action, hidden_out, noise_scale=eval_noise_scale) # clipped normal noise
+
         # reward = reward_scale * (reward - reward.mean(dim=0)) / (reward.std(dim=0) + 1e-6) # normalize with batch mean and std; plus a small number to prevent numerical problem
 
         # Training Q Function
@@ -177,27 +178,12 @@ def plot(rewards):
     plt.savefig('td3_lstm.png')
     # plt.show()
 
-
 # choose env
-ENV = ['Reacher', 'Pendulum-v0', 'HalfCheetah-v2'][1]
-if ENV == 'Reacher':
-    NUM_JOINTS=2
-    LINK_LENGTH=[200, 140]
-    INI_JOING_ANGLES=[0.1, 0.1]
-    SCREEN_SIZE=1000
-    SPARSE_REWARD=False
-    SCREEN_SHOT=False
-    action_range = 10.0
-
-    env=Reacher(screen_size=SCREEN_SIZE, num_joints=NUM_JOINTS, link_lengths = LINK_LENGTH, \
-    ini_joint_angles=INI_JOING_ANGLES, target_pos = [369,430], render=True, change_goal=False)
-    action_space = spaces.Box(low=-1.0, high=1.0, shape=(env.num_actions,), dtype=np.float32)
-    state_space  = spaces.Box(low=-np.inf, high=np.inf, shape=(env.num_observations, ))
-else:
-    env = NormalizedActions(gym.make(ENV))
-    action_space = env.action_space
-    state_space  = env.observation_space
-    action_range=1.
+ENV = 'HalfCheetah-v2'
+env = NormalizedActions(MuJoCoHistoryEnv(ENV, hist_len=0, history_type="pomdp"))
+action_space = env.action_space
+state_space  = env.observation_space
+action_range=1.
 
 replay_buffer_size = 5e5
 replay_buffer = ReplayBufferLSTM2(replay_buffer_size)
@@ -205,7 +191,7 @@ replay_buffer = ReplayBufferLSTM2(replay_buffer_size)
 
 # hyper-parameters for RL training
 max_episodes  = 1000
-max_steps   = 20 if ENV ==  'Reacher' else 150  # Pendulum needs 150 steps per episode to learn well, cannot handle 20
+max_steps   =  150 
 frame_idx   = 0
 batch_size  = 2  # each sample contains an episode for lstm policy
 explore_steps = 0  # for random action sampling in the beginning of training
@@ -213,7 +199,7 @@ update_itr = 1
 hidden_dim = 512
 policy_target_update_interval = 10 # delayed update for the policy network and target networks
 DETERMINISTIC=True  # DDPG: deterministic policy gradient
-explore_noise_scale = 0.5
+explore_noise_scale = 0.1
 eval_noise_scale = 0.5
 reward_scale = 1.
 rewards     = []

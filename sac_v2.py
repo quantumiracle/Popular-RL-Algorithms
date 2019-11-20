@@ -337,36 +337,31 @@ replay_buffer_size = 1e6
 replay_buffer = ReplayBuffer(replay_buffer_size)
 
 # choose env
-ENV = ['Pendulum', 'Reacher'][0]
+ENV = ['Reacher', 'Pendulum-v0', 'HalfCheetah-v2'][2]
 if ENV == 'Reacher':
     NUM_JOINTS=2
     LINK_LENGTH=[200, 140]
     INI_JOING_ANGLES=[0.1, 0.1]
-    # NUM_JOINTS=4
-    # LINK_LENGTH=[200, 140, 80, 50]
-    # INI_JOING_ANGLES=[0.1, 0.1, 0.1, 0.1]
     SCREEN_SIZE=1000
     SPARSE_REWARD=False
     SCREEN_SHOT=False
     action_range = 10.0
-
     env=Reacher(screen_size=SCREEN_SIZE, num_joints=NUM_JOINTS, link_lengths = LINK_LENGTH, \
     ini_joint_angles=INI_JOING_ANGLES, target_pos = [369,430], render=True, change_goal=False)
     action_dim = env.num_actions
     state_dim  = env.num_observations
-elif ENV == 'Pendulum':
-    env = NormalizedActions(gym.make("Pendulum-v0"))
+else:
+    env = NormalizedActions(gym.make(ENV))
     action_dim = env.action_space.shape[0]
     state_dim  = env.observation_space.shape[0]
     action_range=1.
-
 
 # hyper-parameters for RL training
 max_episodes  = 1000
 max_steps   = 20 if ENV ==  'Reacher' else 150  # Pendulum needs 150 steps per episode to learn well, cannot handle 20
 frame_idx   = 0
-batch_size  = 256
-explore_steps = 200  # for random action sampling in the beginning of training
+batch_size  = 300
+explore_steps = 0  # for random action sampling in the beginning of training
 update_itr = 1
 AUTO_ENTROPY=True
 DETERMINISTIC=False
@@ -382,7 +377,7 @@ if __name__ == '__main__':
         for eps in range(max_episodes):
             if ENV == 'Reacher':
                 state = env.reset(SCREEN_SHOT)
-            elif ENV == 'Pendulum':
+            else:
                 state =  env.reset()
             episode_reward = 0
             
@@ -394,7 +389,7 @@ if __name__ == '__main__':
                     action = sac_trainer.policy_net.sample_action()
                 if ENV ==  'Reacher':
                     next_state, reward, done, _ = env.step(action, SPARSE_REWARD, SCREEN_SHOT)
-                elif ENV ==  'Pendulum':
+                else:
                     next_state, reward, done, _ = env.step(action)
                     env.render()       
                     
@@ -414,6 +409,7 @@ if __name__ == '__main__':
 
             if eps % 20 == 0 and eps>0: # plot and model saving interval
                 plot(rewards)
+                np.save('rewards', rewards)
                 sac_trainer.save_model(model_path)
             print('Episode: ', eps, '| Episode Reward: ', episode_reward)
             rewards.append(episode_reward)
@@ -424,7 +420,7 @@ if __name__ == '__main__':
         for eps in range(10):
             if ENV == 'Reacher':
                 state = env.reset(SCREEN_SHOT)
-            elif ENV == 'Pendulum':
+            else:
                 state =  env.reset()
             episode_reward = 0
 
@@ -432,7 +428,7 @@ if __name__ == '__main__':
                 action = sac_trainer.policy_net.get_action(state, deterministic = DETERMINISTIC)
                 if ENV ==  'Reacher':
                     next_state, reward, done, _ = env.step(action, SPARSE_REWARD, SCREEN_SHOT)
-                elif ENV ==  'Pendulum':
+                else:
                     next_state, reward, done, _ = env.step(action)
                     env.render()   
 

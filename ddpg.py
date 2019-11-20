@@ -251,7 +251,7 @@ if __name__ == '__main__':
     SCREEN_SIZE=1000
     # SPARSE_REWARD=False
     # SCREEN_SHOT=False
-    ENV = ['Pendulum', 'Reacher'][1]
+    ENV = ['Pendulum', 'Reacher', 'HalfCheetah'][2]
     if ENV == 'Reacher':
         env=Reacher(screen_size=SCREEN_SIZE, num_joints=NUM_JOINTS, link_lengths = LINK_LENGTH, \
         ini_joint_angles=INI_JOING_ANGLES, target_pos = [369,430], render=True)
@@ -260,6 +260,11 @@ if __name__ == '__main__':
     elif ENV == 'Pendulum':
         # env = NormalizedActions(gym.make("Pendulum-v0"))
         env = gym.make("Pendulum-v0")
+        action_dim = env.action_space.shape[0]
+        state_dim  = env.observation_space.shape[0]
+    elif ENV == 'HalfCheetah':
+        env = gym.make("HalfCheetah-v2")
+        print(env.action_space, env.observation_space)
         action_dim = env.action_space.shape[0]
         state_dim  = env.observation_space.shape[0]
     hidden_dim = 512

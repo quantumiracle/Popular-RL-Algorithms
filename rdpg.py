@@ -164,7 +164,7 @@ if __name__ == '__main__':
     SCREEN_SIZE=1000
     # SPARSE_REWARD=False
     # SCREEN_SHOT=False
-    ENV = ['Pendulum', 'Reacher'][1]
+    ENV = ['Pendulum', 'Reacher'][0]
     if ENV == 'Reacher':
         env=Reacher(screen_size=SCREEN_SIZE, num_joints=NUM_JOINTS, link_lengths = LINK_LENGTH, \
         ini_joint_angles=INI_JOING_ANGLES, target_pos = [369,430], render=True)
@@ -268,6 +268,7 @@ if __name__ == '__main__':
                 hidden_in = hidden_out
                 action, hidden_out= alg.policy_net.get_action(state, last_action, hidden_in, noise_scale=0.0)  # no noise for testing
                 next_state, reward, done, _ = env.step(action)
+                env.render()
                 
                 last_action = action
                 state = next_state

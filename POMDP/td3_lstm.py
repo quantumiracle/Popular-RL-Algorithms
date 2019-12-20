@@ -114,17 +114,21 @@ class TD3_Trainer():
         last_action     = torch.FloatTensor(last_action).to(device)
         reward     = torch.FloatTensor(reward).unsqueeze(-1).to(device)  
         done       = torch.FloatTensor(np.float32(done)).unsqueeze(-1).to(device)
- 
-        predicted_q_value1, _ = self.q_net1(state, action, last_action, hidden_in)
-        predicted_q_value2, _ = self.q_net2(state, action, last_action, hidden_in)
+
+        # hidden_ini = (torch.zeros([1, batch_size, self.hidden_dim], dtype=torch.float).cuda(), \
+        #     torch.zeros([1, batch_size, self.hidden_dim], dtype=torch.float).cuda())
+        hidden_ini = hidden_in  # although Q-net and policy net do not share layers, we use same hidden layer for initialization
+
+        predicted_q_value1, _ = self.q_net1(state, action, last_action, hidden_ini)
+        predicted_q_value2, _ = self.q_net2(state, action, last_action, hidden_ini)
         new_action,  _= self.policy_net.evaluate(state, last_action, hidden_in, noise_scale=0.0)  # no noise, deterministic policy gradients
         new_next_action, _ = self.target_policy_net.evaluate(next_state, action, hidden_out, noise_scale=eval_noise_scale) # clipped normal noise
 
         # reward = reward_scale * (reward - reward.mean(dim=0)) / (reward.std(dim=0) + 1e-6) # normalize with batch mean and std; plus a small number to prevent numerical problem
 
         # Training Q Function
-        predicted_target_q1, _ = self.target_q_net1(next_state, new_next_action, action, hidden_out)
-        predicted_target_q2, _ = self.target_q_net2(next_state, new_next_action, action, hidden_out)
+        predicted_target_q1, _ = self.target_q_net1(next_state, new_next_action, action, hidden_ini)
+        predicted_target_q2, _ = self.target_q_net2(next_state, new_next_action, action, hidden_ini)
         target_q_min = torch.min(predicted_target_q1, predicted_target_q2)
 
         target_q_value = reward + (1 - done) * gamma * target_q_min # if done==1, only reward
@@ -143,7 +147,7 @@ class TD3_Trainer():
             ''' implementation 1 '''
             # predicted_new_q_value = torch.min(self.q_net1(state, new_action),self.q_net2(state, new_action))
             ''' implementation 2 '''
-            predicted_new_q_value, _ = self.q_net1(state, new_action, last_action, hidden_in)
+            predicted_new_q_value, _ = self.q_net1(state, new_action, last_action, hidden_ini)
 
             policy_loss = - predicted_new_q_value.mean()
             self.policy_optimizer.zero_grad()

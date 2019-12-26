@@ -62,10 +62,11 @@ BATCH = 128  # update batchsize
 A_UPDATE_STEPS = 10  # actor update steps
 C_UPDATE_STEPS = 10  # critic update steps
 EPS = 1e-8  # epsilon
+MODEL_PATH = 'model/ppo_multi'
 METHOD = [
     dict(name='kl_pen', kl_target=0.01, lam=0.5),  # KL penalty
     dict(name='clip', epsilon=0.2),  # Clipped surrogate objective, find this is better
-][1]  # choose the method for optimization
+][0]  # choose the method for optimization
 
 ###############################  PPO  ####################################
 
@@ -303,82 +304,129 @@ class PPO(object):
         self.actor.eval()
         self.critic.eval()
         self.actor_old.eval()
-        
 
-def main():
+def ShareParameters(adamoptim):
+    ''' share parameters of Adamoptimizers for multiprocessing '''
+    for group in adamoptim.param_groups:
+        for p in group['params']:
+            state = adamoptim.state[p]
+            # initialize: have to initialize here, or else cannot find
+            state['step'] = 0
+            state['exp_avg'] = torch.zeros_like(p.data)
+            state['exp_avg_sq'] = torch.zeros_like(p.data)
+
+            # share in memory
+            state['exp_avg'].share_memory_()
+            state['exp_avg_sq'].share_memory_()
+
+def plot(rewards):
+    clear_output(True)
+    plt.figure(figsize=(20,5))
+    plt.plot(rewards)
+    plt.savefig('ppo_multi.png')
+    # plt.show()
+    plt.clf()
+
+def worker(id, ppo_trainer, rewards_queue):
 
     env = gym.make(ENV_NAME).unwrapped
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
 
+    all_ep_r = []
+    for ep in range(EP_MAX):
+        s = env.reset()
+        buffer={
+            'state':[],
+            'action':[],
+            'reward':[]
+        }
+        ep_r = 0
+        t0 = time.time()
+        for t in range(EP_LEN):  # in one episode
+            # env.render()
+            a = ppo.choose_action(s)
+            s_, r, done, _ = env.step(a)
+            buffer['state'].append(s)
+            buffer['action'].append(a)
+            buffer['reward'].append((r + 8) / 8)  # normalize reward, find to be useful
+            s = s_
+            ep_r += r
+
+            # update ppo
+            if (t + 1) % BATCH == 0 or t == EP_LEN - 1:
+                v_s_ = ppo.get_v(s_)
+                discounted_r = []
+                for r in buffer['reward'][::-1]:
+                    v_s_ = r + GAMMA * v_s_
+                    discounted_r.append(v_s_)
+                discounted_r.reverse()
+
+                bs, ba, br = np.vstack(buffer['state']), np.vstack(buffer['action']), np.array(discounted_r)[:, np.newaxis]
+                buffer['state'], buffer['action'], buffer['reward'] = [], [], []
+                ppo.update(bs, ba, br)
+        if ep == 0:
+            all_ep_r.append(ep_r)
+        else:
+            all_ep_r.append(all_ep_r[-1] * 0.9 + ep_r * 0.1)
+        if ep%50==0:
+            ppo.save_model(MODEL_PATH)
+        print(
+            'Episode: {}/{}  | Episode Reward: {:.4f}  | Running Time: {:.4f}'.format(
+                ep, EP_MAX, ep_r,
+                time.time() - t0
+            )
+        )
+        rewards_queue.put(episode_reward)        
+    ppo.save_model(MODEL_PATH)
+
+def main():
     # reproducible
-    env.seed(RANDOMSEED)
+    # env.seed(RANDOMSEED)
     np.random.seed(RANDOMSEED)
     torch.manual_seed(RANDOMSEED)
+
+    env = gym.make(ENV_NAME).unwrapped
+    state_dim = env.observation_space.shape[0]
+    action_dim = env.action_space.shape[0]
 
     ppo = PPO(state_dim, action_dim, hidden_dim=128)
 
     if args.train:
-        all_ep_r = []
-        for ep in range(EP_MAX):
-            s = env.reset()
-            buffer={
-                'state':[],
-                'action':[],
-                'reward':[]
-            }
-            ep_r = 0
-            t0 = time.time()
-            for t in range(EP_LEN):  # in one episode
-                # env.render()
-                a = ppo.choose_action(s)
-                s_, r, done, _ = env.step(a)
-                buffer['state'].append(s)
-                buffer['action'].append(a)
-                buffer['reward'].append((r + 8) / 8)  # normalize reward, find to be useful
-                s = s_
-                ep_r += r
+        ppo.actor.share_memory()
+        ppo.actor_old.share_memory()
+        ppo.critic.share_memory()
+        ShareParameters(ppo.actor_optimizer)
+        ShareParameters(ppo.critic_optimizer)
+        rewards_queue=mp.Queue()  # used for get rewards from all processes and plot the curve
+        num_workers=2  # or: mp.cpu_count()
+        processes=[]
+        rewards=[]
 
-                # update ppo
-                if (t + 1) % BATCH == 0 or t == EP_LEN - 1:
-                    v_s_ = ppo.get_v(s_)
-                    discounted_r = []
-                    for r in buffer['reward'][::-1]:
-                        v_s_ = r + GAMMA * v_s_
-                        discounted_r.append(v_s_)
-                    discounted_r.reverse()
+        for i in range(num_workers):
+            process = Process(target=worker, args=(i, ppo, rewards_queue))  # the args contain shared and not shared
+            process.daemon=True  # all processes closed when the main stops
+            processes.append(process)
 
-                    bs, ba, br = np.vstack(buffer['state']), np.vstack(buffer['action']), np.array(discounted_r)[:, np.newaxis]
-                    buffer['state'], buffer['action'], buffer['reward'] = [], [], []
-                    ppo.update(bs, ba, br)
-            if ep == 0:
-                all_ep_r.append(ep_r)
+        [p.start() for p in processes]
+        while True:  # keep geting the episode reward from the queue
+            r = rewards_queue.get()
+            if r is not None:
+                rewards.append(r)
             else:
-                all_ep_r.append(all_ep_r[-1] * 0.9 + ep_r * 0.1)
-            if ep%50==0:
-                ppo.save_model('model/ppo')
-            print(
-                'Episode: {}/{}  | Episode Reward: {:.4f}  | Running Time: {:.4f}'.format(
-                    ep, EP_MAX, ep_r,
-                    time.time() - t0
-                )
-            )
+                break
 
-            plt.ion()
-            plt.cla()
-            plt.title('PPO')
-            plt.plot(np.arange(len(all_ep_r)), all_ep_r)
-            plt.ylim(-2000, 0)
-            plt.xlabel('Episode')
-            plt.ylabel('Moving averaged episode reward')
-            plt.show()
-            plt.pause(0.1)
-        ppo.save_model('model/ppo')
-        plt.ioff()
-        plt.show()
+            if len(rewards)%20==0 and len(rewards)>0:
+                plot(rewards)
+
+        [p.join() for p in processes]  # finished at the same time
+
+        ppo.save_model(MODEL_PATH)
+        
+
 
     if args.test:
-        ppo.load_model('model/ppo')
+        ppo.load_model(MODEL_PATH)
         while True:
             s = env.reset()
             for i in range(EP_LEN):

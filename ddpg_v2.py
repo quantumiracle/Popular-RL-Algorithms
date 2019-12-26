@@ -70,7 +70,6 @@ class DDPG():
             target_param.data.copy_(  # copy data value into target parameters
                 target_param.data * (1.0 - soft_tau) + param.data * soft_tau
             )
-
         return target_net
 
     def update(self, batch_size, reward_scale=10.0, gamma=0.99, soft_tau=1e-2, policy_up_itr=10, target_update_delay=3, warmup=True):

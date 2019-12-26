@@ -349,7 +349,8 @@ def worker(id, ppo_trainer, rewards_queue):
             s_, r, done, _ = env.step(a)
             buffer['state'].append(s)
             buffer['action'].append(a)
-            buffer['reward'].append((r + 8) / 8)  # normalize reward, find to be useful
+            buffer['reward'].append(r) 
+            # buffer['reward'].append((r + 8) / 8)  # normalize reward, find to be useful sometimes
             s = s_
             ep_r += r
 

@@ -247,7 +247,7 @@ class PPO(object):
 
         self.update_old_pi()
         adv = self.cal_adv(s, r)
-        # adv = (adv - adv.mean())/(adv.std()+1e-6)  # sometimes helpful
+        # adv = (adv - adv.mean())/(adv.std()+1e-6)  # sometimes helpful, not always, minus mean is dangerous
 
         # update actor
         if METHOD['name'] == 'kl_pen':
@@ -335,7 +335,8 @@ def main():
                 s_, r, done, _ = env.step(a)
                 buffer['state'].append(s)
                 buffer['action'].append(a)
-                buffer['reward'].append((r + 8) / 8)  # normalize reward, find to be useful
+                buffer['reward'].append(r) 
+                # buffer['reward'].append((r + 8) / 8)  # normalize reward, find to be useful sometimes
                 s = s_
                 ep_r += r
 

@@ -63,6 +63,7 @@ A_UPDATE_STEPS = 10  # actor update steps
 C_UPDATE_STEPS = 10  # critic update steps
 EPS = 1e-8  # epsilon
 MODEL_PATH = 'model/ppo_multi'
+NUM_WORKERS=2  # or: mp.cpu_count()
 METHOD = [
     dict(name='kl_pen', kl_target=0.01, lam=0.5),  # KL penalty
     dict(name='clip', epsilon=0.2),  # Clipped surrogate objective, find this is better
@@ -327,7 +328,7 @@ def plot(rewards):
     # plt.show()
     plt.clf()
 
-def worker(id, ppo_trainer, rewards_queue):
+def worker(id, ppo, rewards_queue):
 
     env = gym.make(ENV_NAME).unwrapped
     state_dim = env.observation_space.shape[0]
@@ -378,7 +379,7 @@ def worker(id, ppo_trainer, rewards_queue):
                 time.time() - t0
             )
         )
-        rewards_queue.put(episode_reward)        
+        rewards_queue.put(ep_r)        
     ppo.save_model(MODEL_PATH)
 
 def main():
@@ -400,11 +401,10 @@ def main():
         ShareParameters(ppo.actor_optimizer)
         ShareParameters(ppo.critic_optimizer)
         rewards_queue=mp.Queue()  # used for get rewards from all processes and plot the curve
-        num_workers=2  # or: mp.cpu_count()
         processes=[]
         rewards=[]
 
-        for i in range(num_workers):
+        for i in range(NUM_WORKERS):
             process = Process(target=worker, args=(i, ppo, rewards_queue))  # the args contain shared and not shared
             process.daemon=True  # all processes closed when the main stops
             processes.append(process)

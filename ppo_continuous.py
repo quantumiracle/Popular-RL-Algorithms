@@ -1,8 +1,13 @@
-'''
-PPO
-'''
+"""
+Proximal Policy Optimization (PPO) version 2
+----------------------------
+2 actors and 1 critic
+old policy given by old actor, which is delayed copy of actor
 
-
+To run
+------
+python tutorial_PPO.py --train/test
+"""
 import math
 import random
 
@@ -50,7 +55,7 @@ args = parser.parse_args()
 
 #####################  hyper parameters  ####################
 
-ENV_NAME = 'Pendulum-v0'  # environment name
+ENV_NAME = 'HalfCheetah-v2'  # environment name HalfCheetah-v2 Pendulum-v0
 RANDOMSEED = 2  # random seed
 
 EP_MAX = 1000  # total number of episodes for training
@@ -78,8 +83,8 @@ class ValueNetwork(nn.Module):
         # self.linear3 = nn.Linear(hidden_dim, hidden_dim)
         self.linear4 = nn.Linear(hidden_dim, 1)
         # weights initialization
-        self.linear4.weight.data.uniform_(-init_w, init_w)
-        self.linear4.bias.data.uniform_(-init_w, init_w)
+        # self.linear4.weight.data.uniform_(-init_w, init_w)
+        # self.linear4.bias.data.uniform_(-init_w, init_w)
         
     def forward(self, state):
         x = F.relu(self.linear1(state))
@@ -101,24 +106,23 @@ class PolicyNetwork(nn.Module):
         # self.linear4 = nn.Linear(hidden_dim, hidden_dim)
 
         self.mean_linear = nn.Linear(hidden_dim, num_actions)
-        self.mean_linear.weight.data.uniform_(-init_w, init_w)
-        self.mean_linear.bias.data.uniform_(-init_w, init_w)
+        # self.mean_linear.weight.data.uniform_(-init_w, init_w)
+        # self.mean_linear.bias.data.uniform_(-init_w, init_w)
         
         self.log_std_linear = nn.Linear(hidden_dim, num_actions)
-        self.log_std_linear.weight.data.uniform_(-init_w, init_w)
-        self.log_std_linear.bias.data.uniform_(-init_w, init_w)
+        # self.log_std_linear.weight.data.uniform_(-init_w, init_w)
+        # self.log_std_linear.bias.data.uniform_(-init_w, init_w)
 
         self.num_actions = num_actions
+        self.action_range = action_range
 
-        
     def forward(self, state):
         x = F.relu(self.linear1(state))
         x = F.relu(self.linear2(x))
         # x = F.relu(self.linear3(x))
         # x = F.relu(self.linear4(x))
 
-        mean    = self.mean_linear(x)
-        # mean    = F.leaky_relu(self.mean_linear(x))
+        mean    = self.action_range * F.tanh(self.mean_linear(x))
         log_std = self.log_std_linear(x)
         log_std = torch.clamp(log_std, self.log_std_min, self.log_std_max)
         
@@ -130,7 +134,11 @@ class PolicyNetwork(nn.Module):
         std = log_std.exp()
         normal = Normal(0, 1)
         z      = normal.sample() 
-        action  = mean+std*z
+        if deterministic:
+            action = mean
+        else:
+            action  = mean+std*z
+        action = torch.clamp(action, -self.action_range, self.action_range)
         return action.squeeze(0)
 
     def sample_action(self,):
@@ -161,8 +169,8 @@ class PPO(object):
     PPO class
     '''
     def __init__(self, state_dim, action_dim, hidden_dim=512, a_lr=3e-4, c_lr=3e-4):
-        self.actor = PolicyNetwork(state_dim, action_dim, hidden_dim).to(device)
-        self.actor_old = PolicyNetwork(state_dim, action_dim, hidden_dim).to(device)
+        self.actor = PolicyNetwork(state_dim, action_dim, hidden_dim, 2.).to(device)
+        self.actor_old = PolicyNetwork(state_dim, action_dim, hidden_dim, 2.).to(device)
         self.critic = ValueNetwork(state_dim, hidden_dim).to(device)
         self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=a_lr)
         self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=c_lr)
@@ -270,13 +278,13 @@ class PPO(object):
         for _ in range(C_UPDATE_STEPS):
             self.c_train(r, s)     
 
-    def choose_action(self, s):
+    def choose_action(self, s, deterministic=False):
         '''
         Choose action
         :param s: state
         :return: clipped act
         '''
-        a = self.actor.get_action(s)
+        a = self.actor.get_action(s, deterministic)
         return a.detach().cpu().numpy()
     
     def get_v(self, s):
@@ -288,7 +296,9 @@ class PPO(object):
         s = s.astype(np.float32)
         if s.ndim < 2: s = s[np.newaxis, :]
         s = torch.FloatTensor(s).to(device)  
-        return self.critic(s).detach().cpu().numpy()[0, 0]
+        # return self.critic(s).detach().cpu().numpy()[0, 0]
+        return self.critic(s).squeeze(0).detach().cpu().numpy()
+
 
     def save_model(self, path):
         torch.save(self.actor.state_dict(), path+'_actor')
@@ -307,7 +317,7 @@ class PPO(object):
 
 def main():
 
-    env = gym.make(ENV_NAME).unwrapped
+    env = NormalizedActions(gym.make(ENV_NAME).unwrapped)
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
 
@@ -341,8 +351,11 @@ def main():
                 ep_r += r
 
                 # update ppo
-                if (t + 1) % BATCH == 0 or t == EP_LEN - 1:
-                    v_s_ = ppo.get_v(s_)
+                if (t + 1) % BATCH == 0 or t == EP_LEN - 1 or done:
+                    if done:
+                        v_s_=0
+                    else:
+                        v_s_ = ppo.get_v(s_)[0]
                     discounted_r = []
                     for r in buffer['reward'][::-1]:
                         v_s_ = r + GAMMA * v_s_
@@ -352,6 +365,9 @@ def main():
                     bs, ba, br = np.vstack(buffer['state']), np.vstack(buffer['action']), np.array(discounted_r)[:, np.newaxis]
                     buffer['state'], buffer['action'], buffer['reward'] = [], [], []
                     ppo.update(bs, ba, br)
+
+                if done:
+                    break
             if ep == 0:
                 all_ep_r.append(ep_r)
             else:
@@ -369,7 +385,7 @@ def main():
             plt.cla()
             plt.title('PPO')
             plt.plot(np.arange(len(all_ep_r)), all_ep_r)
-            plt.ylim(-2000, 0)
+            # plt.ylim(-2000, 0)
             plt.xlabel('Episode')
             plt.ylabel('Moving averaged episode reward')
             plt.show()
@@ -384,7 +400,9 @@ def main():
             s = env.reset()
             for i in range(EP_LEN):
                 env.render()
-                s, r, done, _ = env.step(ppo.choose_action(s))
+                a = ppo.choose_action(s, True)
+                print(a)
+                s, r, done, _ = env.step(a)
                 if done:
                     break
 if __name__ == '__main__':

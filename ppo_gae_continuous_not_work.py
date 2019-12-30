@@ -61,7 +61,7 @@ class PPO(nn.Module):
         x2 = F.relu(self.linear4(x))
 
         mean    = F.tanh(self.mean_linear(x1))
-        log_std = F.tanh(self.log_std_linear(x2))
+        log_std = self.log_std_linear(x2)
 
         return mean, log_std
     
@@ -71,7 +71,7 @@ class PPO(nn.Module):
         x = F.relu(self.linear5(x))
         x = F.relu(self.linear6(x))
 
-        v = F.tanh(self.v_linear(x))
+        v = self.v_linear(x)
         return v
       
     def get_action(self, x):

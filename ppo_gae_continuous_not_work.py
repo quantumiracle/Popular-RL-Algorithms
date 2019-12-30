@@ -147,8 +147,7 @@ class PPO(nn.Module):
         
 def main():
     # env = gym.make('CartPole-v1')
-    # env = NormalizedActions(gym.make('Pendulum-v0'))
-    env = gym.make('Pendulum-v0')
+    env = NormalizedActions(gym.make('Pendulum-v0'))
     # env = gym.make('HalfCheetah-v2')
     state_dim = env.observation_space.shape[0]
     action_dim =  env.action_space.shape[0]

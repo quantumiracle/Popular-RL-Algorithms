@@ -356,7 +356,7 @@ def worker(id, ppo, rewards_queue):
             # env.render()
             a = ppo.choose_action(s)
             s_, r, done, _ = env.step(a)
-            ppo.store_transition(s, a, (r+8)/8)
+            ppo.store_transition(s, a, (r+8)/8)  # useful for pendulum
             s = s_
             ep_r += r
 

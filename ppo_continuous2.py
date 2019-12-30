@@ -48,7 +48,7 @@ A_UPDATE_STEPS = 10  # actor update steps
 C_UPDATE_STEPS = 10  # critic update steps
 S_DIM, A_DIM = 3, 1  # state dimension, action dimension
 ACTION_RANGE = 2.  # if unnormalized, normalized action range should be 1.
-EPS = 1e-8  # epsilon
+EPS = 1e-8  # numerical residual
 TEST_EP = 10
 # ppo-penalty
 KL_TARGET = 0.01

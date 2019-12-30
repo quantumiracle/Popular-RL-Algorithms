@@ -170,8 +170,8 @@ class PPO(object):
         """
         mu, sigma = self.actor(state)
         pi = torch.distributions.Normal(mu, sigma)
-        ratio = torch.exp(pi.log_prob(action) - old_pi.log_prob(action))
-        surr = ratio * adv
+        # ratio = torch.exp(pi.log_prob(a) - oldpi.log_prob(a))  # sometimes give nan
+        ratio = torch.exp(pi.log_prob(a)) / (torch.exp(oldpi.log_prob(a)) + EPS)        surr = ratio * adv
         if self.method == 'penalty':
             kl = torch.distributions.kl_divergence(old_pi, pi)
             kl_mean = kl.mean()
@@ -400,7 +400,10 @@ def main():
         while True:  # keep geting the episode reward from the queue
             r = rewards_queue.get()
             if r is not None:
-                rewards.append(r)
+                if len(rewards) == 0:
+                    rewards.append(r)
+                else:
+                    rewards.append(rewards[-1] * 0.9 + r * 0.1)   
             else:
                 break
 

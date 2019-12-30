@@ -66,7 +66,7 @@ C_LR = 0.0002  # learning rate for critic
 BATCH = 128  # update batchsize
 A_UPDATE_STEPS = 10  # actor update steps
 C_UPDATE_STEPS = 10  # critic update steps
-EPS = 1e-8  # epsilon
+EPS = 1e-8  # numerical residual
 METHOD = [
     dict(name='kl_pen', kl_target=0.01, lam=0.5),  # KL penalty
     dict(name='clip', epsilon=0.2),  # Clipped surrogate objective, find this is better

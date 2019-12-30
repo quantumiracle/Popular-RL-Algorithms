@@ -2,11 +2,14 @@
 Proximal Policy Optimization (PPO) version 2
 ----------------------------
 1 actor and 1 critic
-old policy by previous actor policy before updating
+Old policy is given by previous actor policy before updating.
+Batch size can be larger than episode length, only update when batch size is reached,
+therefore the trick of increasing batch size for stabilizing training can be applied.
+
 
 To run
 ------
-python tutorial_PPO.py --train/test
+python ***.py --train/test
 """
 import argparse
 import threading
@@ -46,7 +49,6 @@ C_LR = 0.0002  # learning rate for critic
 BATCH_SIZE = 32  # update batchsize
 A_UPDATE_STEPS = 10  # actor update steps
 C_UPDATE_STEPS = 10  # critic update steps
-S_DIM, A_DIM = 3, 1  # state dimension, action dimension
 ACTION_RANGE = 2.  # if unnormalized, normalized action range should be 1.
 EPS = 1e-8  # numerical residual
 TEST_EP = 10
@@ -123,9 +125,9 @@ class PPO(object):
     PPO class
     """
 
-    def __init__(self, method='clip'):
-        self.actor = PolicyNetwork(S_DIM, A_DIM, 128, ACTION_RANGE).to(device)
-        self.critic = ValueNetwork(S_DIM, 128).to(device)
+    def __init__(self, state_dim, action_dim, hidden_dim=128, method='clip'):
+        self.actor = PolicyNetwork(state_dim, action_dim, hidden_dim, ACTION_RANGE).to(device)
+        self.critic = ValueNetwork(state_dim, hidden_dim).to(device)
         print(self.actor, self.critic)
 
         self.actor_opt = torch.optim.Adam(self.actor.parameters(), lr=A_LR)
@@ -335,13 +337,15 @@ class Drawer:
 
 def train():
     env = gym.make(ENV_NAME).unwrapped
+    state_dim = env.observation_space.shape[0]
+    action_dim = env.action_space.shape[0]
 
     # reproducible
     env.seed(RANDOMSEED)
     np.random.seed(RANDOMSEED)
     torch.manual_seed(RANDOMSEED)
 
-    ppo = PPO(METHOD)
+    ppo = PPO(state_dim, action_dim, method = METHOD)
     global all_ep_r, update_plot, stop_plot
     all_ep_r = []
     for ep in range(EP_MAX):
@@ -396,7 +400,9 @@ if __name__ == '__main__':
 
     # test
     env = gym.make(ENV_NAME).unwrapped
-    ppo = PPO()
+    state_dim = env.observation_space.shape[0]
+    action_dim = env.action_space.shape[0]
+    ppo = PPO(state_dim, action_dim, method = METHOD)
     ppo.load_model()
     for _ in range(TEST_EP):
         state = env.reset()

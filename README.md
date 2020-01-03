@@ -65,6 +65,18 @@ This repo only contains **PyTorch** Implementation.
   [Memory-based control with recurrent neural networks](https://arxiv.org/abs/1512.04455)
 
   [Sim-to-Real Transfer of Robotic Control with Dynamics Randomization](https://arxiv.org/abs/1710.06537)
+  
+ * **Maximum a Posteriori Policy Optimisation (MPO)**:
+ 
+ todo
+ 
+ [Maximum a Posteriori Policy Optimisation](https://arxiv.org/abs/1806.06920)
+ 
+ * **Advantage-Weighted Regression (AWR)**:
+ 
+ todo 
+ 
+ [Advantage-Weighted Regression: Simple and Scalable Off-Policy Reinforcement Learning](https://arxiv.org/pdf/1910.00177.pdf)
 
 ## Usage:
 `python ***.py --train` 

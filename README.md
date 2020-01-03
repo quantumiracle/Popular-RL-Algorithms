@@ -68,15 +68,15 @@ This repo only contains **PyTorch** Implementation.
   
  * **Maximum a Posteriori Policy Optimisation (MPO)**:
  
- todo
- 
- [Maximum a Posteriori Policy Optimisation](https://arxiv.org/abs/1806.06920)
+    todo
+
+    paper: [Maximum a Posteriori Policy Optimisation](https://arxiv.org/abs/1806.06920)
  
  * **Advantage-Weighted Regression (AWR)**:
- 
- todo 
- 
- [Advantage-Weighted Regression: Simple and Scalable Off-Policy Reinforcement Learning](https://arxiv.org/pdf/1910.00177.pdf)
+
+    todo 
+
+    paper: [Advantage-Weighted Regression: Simple and Scalable Off-Policy Reinforcement Learning](https://arxiv.org/pdf/1910.00177.pdf)
 
 ## Usage:
 `python ***.py --train` 

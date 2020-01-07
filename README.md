@@ -46,7 +46,7 @@ This repo only contains **PyTorch** Implementation.
 
 * Two versions of **QT-Opt** are implemented [here](https://github.com/quantumiracle/QT_Opt).
 
-* **PointNet** for landmarks generation from images with unsupervised learning is implemented [here](https://github.com/quantumiracle/PointNet_Landmarks_from_Image/tree/master). This method is also used for image-based reinforcement learning as a STOA algorithm, called **Transporter**.
+* **PointNet** for landmarks generation from images with unsupervised learning is implemented [here](https://github.com/quantumiracle/PointNet_Landmarks_from_Image/tree/master). This method is also used for image-based reinforcement learning as a SOTA algorithm, called **Transporter**.
 
   original paper: [Unsupervised Learning of Object Landmarksthrough Conditional Image Generation](https://papers.nips.cc/paper/7657-unsupervised-learning-of-object-landmarks-through-conditional-image-generation.pdf)
 
@@ -65,6 +65,18 @@ This repo only contains **PyTorch** Implementation.
   [Memory-based control with recurrent neural networks](https://arxiv.org/abs/1512.04455)
 
   [Sim-to-Real Transfer of Robotic Control with Dynamics Randomization](https://arxiv.org/abs/1710.06537)
+  
+ * **Maximum a Posteriori Policy Optimisation (MPO)**:
+ 
+    todo
+
+    paper: [Maximum a Posteriori Policy Optimisation](https://arxiv.org/abs/1806.06920)
+ 
+ * **Advantage-Weighted Regression (AWR)**:
+
+    todo 
+
+    paper: [Advantage-Weighted Regression: Simple and Scalable Off-Policy Reinforcement Learning](https://arxiv.org/pdf/1910.00177.pdf)
 
 ## Usage:
 `python ***.py --train` 

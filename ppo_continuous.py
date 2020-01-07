@@ -55,7 +55,7 @@ args = parser.parse_args()
 
 #####################  hyper parameters  ####################
 
-ENV_NAME = 'HalfCheetah-v2'  # environment name HalfCheetah-v2 Pendulum-v0
+ENV_NAME = 'Pendulum-v0'  # environment name HalfCheetah-v2 Pendulum-v0
 RANDOMSEED = 2  # random seed
 
 EP_MAX = 1000  # total number of episodes for training
@@ -73,6 +73,20 @@ METHOD = [
 ][1]  # choose the method for optimization
 
 ###############################  PPO  ####################################
+
+class AddBias(nn.Module):
+    def __init__(self, bias):
+        super(AddBias, self).__init__()
+        self._bias = nn.Parameter(bias.unsqueeze(1))
+
+    def forward(self, x):
+        if x.dim() == 2:
+            bias = self._bias.t().view(1, -1)
+        else:
+            bias = self._bias.t().view(1, -1, 1, 1)
+
+        return x + bias
+
 
 class ValueNetwork(nn.Module):
     def __init__(self, state_dim, hidden_dim, init_w=3e-3):
@@ -106,12 +120,10 @@ class PolicyNetwork(nn.Module):
         # self.linear4 = nn.Linear(hidden_dim, hidden_dim)
 
         self.mean_linear = nn.Linear(hidden_dim, num_actions)
-        # self.mean_linear.weight.data.uniform_(-init_w, init_w)
-        # self.mean_linear.bias.data.uniform_(-init_w, init_w)
-        
-        self.log_std_linear = nn.Linear(hidden_dim, num_actions)
-        # self.log_std_linear.weight.data.uniform_(-init_w, init_w)
-        # self.log_std_linear.bias.data.uniform_(-init_w, init_w)
+        # implementation 1
+        # self.log_std_linear = nn.Linear(hidden_dim, num_actions)
+        # # implementation 2: not dependent on latent features, reference:https://github.com/ikostrikov/pytorch-a2c-ppo-acktr-gail/blob/master/a2c_ppo_acktr/distributions.py
+        self.log_std = AddBias(torch.zeros(num_actions))  
 
         self.num_actions = num_actions
         self.action_range = action_range
@@ -123,9 +135,17 @@ class PolicyNetwork(nn.Module):
         # x = F.relu(self.linear4(x))
 
         mean    = self.action_range * F.tanh(self.mean_linear(x))
-        log_std = self.log_std_linear(x)
-        log_std = torch.clamp(log_std, self.log_std_min, self.log_std_max)
-        
+
+        # implementation 1
+        # log_std = self.log_std_linear(x)
+        # log_std = torch.clamp(log_std, self.log_std_min, self.log_std_max)
+    
+        # implementation 2
+        zeros = torch.zeros(mean.size())
+        if state.is_cuda:
+            zeros = zeros.cuda()
+        log_std = self.log_std(zeros)
+
         return mean, log_std
         
     def get_action(self, state, deterministic=False):

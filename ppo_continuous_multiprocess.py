@@ -64,13 +64,28 @@ C_UPDATE_STEPS = 10  # critic update steps
 EPS = 1e-8   # numerical residual
 MODEL_PATH = 'model/ppo_multi'
 NUM_WORKERS=2  # or: mp.cpu_count()
-ACTION_RANGE = 2.  # if unnormalized, normalized action range should be 1.
+ACTION_RANGE = 1.  # if unnormalized, normalized action range should be 1.
 METHOD = [
     dict(name='kl_pen', kl_target=0.01, lam=0.5),  # KL penalty
     dict(name='clip', epsilon=0.2),  # Clipped surrogate objective, find this is better
 ][0]  # choose the method for optimization
 
 ###############################  PPO  ####################################
+
+
+class AddBias(nn.Module):
+    def __init__(self, bias):
+        super(AddBias, self).__init__()
+        self._bias = nn.Parameter(bias.unsqueeze(1))
+
+    def forward(self, x):
+        if x.dim() == 2:
+            bias = self._bias.t().view(1, -1)
+        else:
+            bias = self._bias.t().view(1, -1, 1, 1)
+
+        return x + bias
+
 
 class ValueNetwork(nn.Module):
     def __init__(self, state_dim, hidden_dim, init_w=3e-3):
@@ -104,12 +119,10 @@ class PolicyNetwork(nn.Module):
         # self.linear4 = nn.Linear(hidden_dim, hidden_dim)
 
         self.mean_linear = nn.Linear(hidden_dim, num_actions)
-        self.mean_linear.weight.data.uniform_(-init_w, init_w)
-        self.mean_linear.bias.data.uniform_(-init_w, init_w)
-        
-        self.log_std_linear = nn.Linear(hidden_dim, num_actions)
-        self.log_std_linear.weight.data.uniform_(-init_w, init_w)
-        self.log_std_linear.bias.data.uniform_(-init_w, init_w)
+        # implementation 1
+        # self.log_std_linear = nn.Linear(hidden_dim, num_actions)
+        # # implementation 2: not dependent on latent features, reference:https://github.com/ikostrikov/pytorch-a2c-ppo-acktr-gail/blob/master/a2c_ppo_acktr/distributions.py
+        self.log_std = AddBias(torch.zeros(num_actions))  
 
         self.num_actions = num_actions
         self.action_range = action_range
@@ -122,8 +135,15 @@ class PolicyNetwork(nn.Module):
         # x = F.relu(self.linear4(x))
 
         mean    = self.action_range * F.tanh(self.mean_linear(x))
-        log_std = self.log_std_linear(x)
-        log_std = torch.clamp(log_std, self.log_std_min, self.log_std_max)
+        # implementation 1
+        # log_std = self.log_std_linear(x)
+        # log_std = torch.clamp(log_std, self.log_std_min, self.log_std_max)
+    
+        # implementation 2
+        zeros = torch.zeros(mean.size())
+        if state.is_cuda:
+            zeros = zeros.cuda()
+        log_std = self.log_std(zeros)
         
         return mean, log_std
         
@@ -396,7 +416,7 @@ def main():
     np.random.seed(RANDOMSEED)
     torch.manual_seed(RANDOMSEED)
 
-    env = gym.make(ENV_NAME).unwrapped
+    env = NormalizedActions(gym.make(ENV_NAME).unwrapped)
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
 

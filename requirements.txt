@@ -124,7 +124,7 @@ six==1.12.0
 sonnet==0.1.6
 tensorboard==1.14.0
 tensorboardX==1.6
-tensorflow-gpu==1.12.0
+tensorflow-gpu==1.15.2
 tensorlayer==1.11.1
 termcolor==1.1.0
 terminado==0.8.2

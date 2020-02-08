@@ -455,8 +455,6 @@ def main():
 
         ppo.save_model(MODEL_PATH)
         
-
-
     if args.test:
         ppo.load_model(MODEL_PATH)
         while True:

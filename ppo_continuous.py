@@ -55,7 +55,7 @@ args = parser.parse_args()
 
 #####################  hyper parameters  ####################
 
-ENV_NAME = 'Pendulum-v0'  # environment name HalfCheetah-v2 Pendulum-v0
+ENV_NAME = 'HalfCheetah-v2'  # environment name HalfCheetah-v2 Pendulum-v0
 RANDOMSEED = 2  # random seed
 
 EP_MAX = 1000  # total number of episodes for training

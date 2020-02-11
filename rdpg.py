@@ -48,10 +48,17 @@ class RDPG():
     def __init__(self, replay_buffer, state_space, action_space, hidden_dim):
         self.replay_buffer = replay_buffer
         self.hidden_dim = hidden_dim
-        self.qnet = QNetworkLSTM(state_space, action_space, hidden_dim).to(device)
-        self.target_qnet = QNetworkLSTM(state_space, action_space, hidden_dim).to(device)
-        self.policy_net = DPG_PolicyNetworkLSTM(state_space, action_space, hidden_dim).to(device)
-        self.target_policy_net = DPG_PolicyNetworkLSTM(state_space, action_space, hidden_dim).to(device)
+        # single-branch network structure as in 'Memory-based control with recurrent neural networks'
+        self.qnet = QNetworkLSTM2(state_space, action_space, hidden_dim).to(device)
+        self.target_qnet = QNetworkLSTM2(state_space, action_space, hidden_dim).to(device)
+        self.policy_net = DPG_PolicyNetworkLSTM2(state_space, action_space, hidden_dim).to(device)
+        self.target_policy_net = DPG_PolicyNetworkLSTM2(state_space, action_space, hidden_dim).to(device)
+
+        # two-branch network structure as in 'Sim-to-Real Transfer of Robotic Control with Dynamics Randomization'
+        # self.qnet = QNetworkLSTM(state_space, action_space, hidden_dim).to(device)
+        # self.target_qnet = QNetworkLSTM(state_space, action_space, hidden_dim).to(device)
+        # self.policy_net = DPG_PolicyNetworkLSTM(state_space, action_space, hidden_dim).to(device)
+        # self.target_policy_net = DPG_PolicyNetworkLSTM(state_space, action_space, hidden_dim).to(device)
 
         print('Q network: ', self.qnet)
         print('Policy network: ', self.policy_net)

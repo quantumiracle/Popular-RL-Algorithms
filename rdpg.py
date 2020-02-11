@@ -218,15 +218,15 @@ if __name__ == '__main__':
                 next_state, reward, done, _ = env.step(action)
                 if ENV !='Reacher':
                     env.render()
-                if step>0:
+                if step==0:
                     ini_hidden_in = hidden_in
                     ini_hidden_out = hidden_out
-                    episode_state.append(state)
-                    episode_action.append(action)
-                    episode_last_action.append(last_action)
-                    episode_reward.append(reward)
-                    episode_next_state.append(next_state)
-                    episode_done.append(done)  
+                episode_state.append(state)
+                episode_action.append(action)
+                episode_last_action.append(last_action)
+                episode_reward.append(reward)
+                episode_next_state.append(next_state)
+                episode_done.append(done)  
 
                 state = next_state
                 last_action = action

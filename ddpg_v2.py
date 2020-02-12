@@ -165,8 +165,8 @@ if __name__ == '__main__':
         state_space  = spaces.Box(low=-np.inf, high=np.inf, shape=(env.num_observations, ))
 
     elif ENV == 'Pendulum':
-        # env = NormalizedActions(gym.make("Pendulum-v0"))
-        env = gym.make("Pendulum-v0")
+        env = NormalizedActions(gym.make("Pendulum-v0"))
+        # env = gym.make("Pendulum-v0")
         action_space = env.action_space
         state_space  = env.observation_space
     hidden_dim = 64

@@ -258,8 +258,8 @@ if __name__ == '__main__':
         action_dim = env.num_actions
         state_dim  = env.num_observations
     elif ENV == 'Pendulum':
-        # env = NormalizedActions(gym.make("Pendulum-v0"))
-        env = gym.make("Pendulum-v0")
+        env = NormalizedActions(gym.make("Pendulum-v0"))
+        # env = gym.make("Pendulum-v0")
         action_dim = env.action_space.shape[0]
         state_dim  = env.observation_space.shape[0]
     elif ENV == 'HalfCheetah':

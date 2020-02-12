@@ -104,8 +104,8 @@ class DPG_PolicyNetworkLSTM(PolicyNetworkBase):
         self.linear4 = nn.Linear(hidden_dim, self._action_dim) # output dim = dim of action
 
         # weights initialization
-        self.linear3.weight.data.uniform_(-init_w, init_w)
-        self.linear3.bias.data.uniform_(-init_w, init_w)
+        self.linear4.weight.data.uniform_(-init_w, init_w)
+        self.linear4.bias.data.uniform_(-init_w, init_w)
     
 
     def forward(self, state, last_action, hidden_in):
@@ -127,7 +127,7 @@ class DPG_PolicyNetworkLSTM(PolicyNetworkBase):
         # merged
         merged_branch=torch.cat([fc_branch, lstm_branch], -1)   
         x = activation(self.linear3(merged_branch))
-        x = F.tanh(self.linear4(x)).clone()
+        x = F.tanh(self.linear4(x))
         x = x.permute(1,0,2)  # permute back
 
         return x, lstm_hidden    # lstm_hidden is actually tuple: (hidden, cell)
@@ -196,7 +196,7 @@ class DPG_PolicyNetworkLSTM2(PolicyNetworkBase):
         # hidden only for initialization, later on hidden states are passed automatically for sequential data
         x,  lstm_hidden = self.lstm1(x, hidden_in)    # no activation after lstm
         x = activation(self.linear2(x))
-        x = F.tanh(self.linear3(x)).clone()
+        x = F.tanh(self.linear3(x))
         x = x.permute(1,0,2)  # permute back
 
         return x, lstm_hidden    # lstm_hidden is actually tuple: (hidden, cell)

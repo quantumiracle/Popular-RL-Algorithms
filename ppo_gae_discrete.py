@@ -14,12 +14,12 @@ K_epoch       = 3
 T_horizon     = 20
 
 class PPO(nn.Module):
-    def __init__(self):
+    def __init__(self, state_dim, action_dim):
         super(PPO, self).__init__()
         self.data = []
         
-        self.fc1   = nn.Linear(4,256)
-        self.fc_pi = nn.Linear(256,2)
+        self.fc1   = nn.Linear(state_dim,256)
+        self.fc_pi = nn.Linear(256,action_dim)
         self.fc_v  = nn.Linear(256,1)
         self.optimizer = optim.Adam(self.parameters(), lr=learning_rate)
 
@@ -86,7 +86,9 @@ class PPO(nn.Module):
         
 def main():
     env = gym.make('CartPole-v1')
-    model = PPO()
+    state_dim = env.observation_space.shape[0]
+    action_dim = env.action_space.n  # discrete
+    model = PPO(state_dim, action_dim)
     score = 0.0
     print_interval = 20
 
@@ -99,8 +101,9 @@ def main():
                 m = Categorical(prob)
                 a = m.sample().item()
                 s_prime, r, done, info = env.step(a)
-
+                # env.render()
                 model.put_data((s, a, r/100.0, s_prime, prob[a].item(), done))
+
                 s = s_prime
 
                 score += r

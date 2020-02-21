@@ -50,7 +50,7 @@ args = parser.parse_args()
 
 #####################  hyper parameters  ####################
 
-ENV_NAME = 'Pendulum-v0'  # environment name
+ENV_NAME = 'LunarLanderContinuous-v2'  # environment name: LunarLander-v2, Pendulum-v0
 RANDOMSEED = 2  # random seed
 
 EP_MAX = 1000  # total number of episodes for training
@@ -63,7 +63,7 @@ A_UPDATE_STEPS = 10  # actor update steps
 C_UPDATE_STEPS = 10  # critic update steps
 EPS = 1e-8  # numerical residual
 MODEL_PATH = 'model/ppo_multi'
-NUM_WORKERS=2  # or: mp.cpu_count()
+NUM_WORKERS=1  # or: mp.cpu_count()
 ACTION_RANGE = 2.  # if unnormalized, normalized action range should be 1.
 METHOD = [
     dict(name='kl_pen', kl_target=0.01, lam=0.5),  # KL penalty

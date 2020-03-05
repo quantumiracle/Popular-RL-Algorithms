@@ -1,5 +1,5 @@
 """
-Proximal Policy Optimization (PPO) version 2
+Proximal Policy Optimization (PPO) version 1
 ----------------------------
 2 actors and 1 critic
 old policy given by old actor, which is delayed copy of actor
@@ -122,7 +122,7 @@ class PolicyNetwork(nn.Module):
         self.mean_linear = nn.Linear(hidden_dim, num_actions)
         # implementation 1
         # self.log_std_linear = nn.Linear(hidden_dim, num_actions)
-        # # implementation 2: not dependent on latent features, reference:https://github.com/ikostrikov/pytorch-a2c-ppo-acktr-gail/blob/master/a2c_ppo_acktr/distributions.py
+        # implementation 2: not dependent on latent features, reference:https://github.com/ikostrikov/pytorch-a2c-ppo-acktr-gail/blob/master/a2c_ppo_acktr/distributions.py
         self.log_std = AddBias(torch.zeros(num_actions))  
 
         self.num_actions = num_actions

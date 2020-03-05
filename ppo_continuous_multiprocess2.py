@@ -1,5 +1,24 @@
 '''
-Multi-processing version of PPO continuous v2
+Multi-processing for PPO continuous version 2
+
+Several tricks need to be careful in multiprocess PPO:
+
+* As PPO takes online training, the buffer contains sequential samples from rollouts,
+so the buffer CANNOT be shared across processes, the sequece orders will be disturbed 
+if the buffer is feeding with samples from different processes at the same time.
+
+* A larger batch size usually ensures the stable training of PPO, also the update steps 
+for both actor and critic need to be large if the training batch is large, because the agent
+is learning from more samples in this case, which requires more training for each batch.
+
+* Reward normalization can be critical. It could have significant effects for environments like
+LunarLanderContinuous-v2, etc.
+
+* The std of the action from the actor usually does no depend on the input state, which follows 
+openai baseline implementation and other high-starred repository. 
+
+* The optimization methods of 'kl_penal' and 'clip' are usually task-specific and empiracle
+
 '''
 
 
@@ -54,39 +73,51 @@ ENV_NAME = 'LunarLanderContinuous-v2'  # environment name: LunarLander-v2, Pendu
 RANDOMSEED = 2  # random seed
 
 EP_MAX = 1000  # total number of episodes for training
-EP_LEN = 200  # total number of steps for each episode
-GAMMA = 0.9  # reward discount
+EP_LEN = 1000  # total number of steps for each episode
+GAMMA = 0.99  # reward discount
 A_LR = 0.0001  # learning rate for actor
 C_LR = 0.0002  # learning rate for critic
-BATCH = 256  # update batchsize
-A_UPDATE_STEPS = 10  # actor update steps
-C_UPDATE_STEPS = 10  # critic update steps
+BATCH = 4096  # update batchsize
+A_UPDATE_STEPS = 50  # actor update steps
+C_UPDATE_STEPS = 50  # critic update steps
+HIDDEN_DIM = 64
 EPS = 1e-8  # numerical residual
 MODEL_PATH = 'model/ppo_multi'
-NUM_WORKERS=1  # or: mp.cpu_count()
-ACTION_RANGE = 2.  # if unnormalized, normalized action range should be 1.
+NUM_WORKERS=2  # or: mp.cpu_count()
+ACTION_RANGE = 1.  # normalized action range should be 1.
 METHOD = [
     dict(name='kl_pen', kl_target=0.01, lam=0.5),  # KL penalty
-    dict(name='clip', epsilon=0.2),  # Clipped surrogate objective, find this is better
-][1]  # choose the method for optimization
+    dict(name='clip', epsilon=0.2),  # Clipped surrogate objective
+][0]  # choose the method for optimization, it's usually task specific
 
 ###############################  PPO  ####################################
+class AddBias(nn.Module):
+    def __init__(self, bias):
+        super(AddBias, self).__init__()
+        self._bias = nn.Parameter(bias.unsqueeze(1))
+
+    def forward(self, x):
+        if x.dim() == 2:
+            bias = self._bias.t().view(1, -1)
+        else:
+            bias = self._bias.t().view(1, -1, 1, 1)
+
+        return x + bias
+
 
 class ValueNetwork(nn.Module):
     def __init__(self, state_dim, hidden_dim, init_w=3e-3):
         super(ValueNetwork, self).__init__()
         
         self.linear1 = nn.Linear(state_dim, hidden_dim)
-        # self.linear2 = nn.Linear(hidden_dim, hidden_dim)
+        self.linear2 = nn.Linear(hidden_dim, hidden_dim)
         # self.linear3 = nn.Linear(hidden_dim, hidden_dim)
         self.linear4 = nn.Linear(hidden_dim, 1)
-        # weights initialization
-        # self.linear4.weight.data.uniform_(-init_w, init_w)
-        # self.linear4.bias.data.uniform_(-init_w, init_w)
+
         
     def forward(self, state):
-        x = F.relu(self.linear1(state))
-        # x = F.relu(self.linear2(x))
+        x = F.tanh(self.linear1(state))
+        x = F.tanh(self.linear2(x))
         # x = F.relu(self.linear3(x))
         x = self.linear4(x)
         return x
@@ -100,30 +131,35 @@ class PolicyNetwork(nn.Module):
         
         self.linear1 = nn.Linear(num_inputs, hidden_dim)
         self.linear2 = nn.Linear(hidden_dim, hidden_dim)
-        # self.linear3 = nn.Linear(hidden_dim, hidden_dim)
+        self.linear3 = nn.Linear(hidden_dim, hidden_dim)
         # self.linear4 = nn.Linear(hidden_dim, hidden_dim)
 
         self.mean_linear = nn.Linear(hidden_dim, num_actions)
-        # self.mean_linear.weight.data.uniform_(-init_w, init_w)
-        # self.mean_linear.bias.data.uniform_(-init_w, init_w)
+
         
-        self.log_std_linear = nn.Linear(hidden_dim, num_actions)
-        # self.log_std_linear.weight.data.uniform_(-init_w, init_w)
-        # self.log_std_linear.bias.data.uniform_(-init_w, init_w)
+        # self.log_std_linear = nn.Linear(hidden_dim, num_actions)
+        self.log_std = AddBias(torch.zeros(num_actions))  
 
         self.num_actions = num_actions
         self.action_range = action_range
 
         
     def forward(self, state):
-        x = F.relu(self.linear1(state))
-        x = F.relu(self.linear2(x))
-        # x = F.relu(self.linear3(x))
+        x = F.tanh(self.linear1(state))
+        x = F.tanh(self.linear2(x))
+        x = F.tanh(self.linear3(x))
         # x = F.relu(self.linear4(x))
 
         mean    = self.action_range * F.tanh(self.mean_linear(x))
-        log_std = self.log_std_linear(x)
-        log_std = torch.clamp(log_std, self.log_std_min, self.log_std_max)
+        
+        # log_std = self.log_std_linear(x)
+        # log_std = torch.clamp(log_std, self.log_std_min, self.log_std_max)
+
+        zeros = torch.zeros(mean.size())
+        if state.is_cuda:
+            zeros = zeros.cuda()
+        log_std = self.log_std(zeros)
+
         std = log_std.exp()
         return mean, std
         
@@ -171,8 +207,6 @@ class PPO(object):
         self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=A_LR)
         self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=C_LR)
         print(self.actor, self.critic)
-        self.state_buffer, self.action_buffer = [], []
-        self.reward_buffer, self.cumulative_reward_buffer = [], []
 
     def a_train(self, s, a, adv, oldpi):
         '''
@@ -185,7 +219,7 @@ class PPO(object):
         '''  
         mu, std = self.actor(s)
         pi = Normal(mu, std)
-
+        adv = adv.detach()  # this is critical, may not work without this line
         # ratio = torch.exp(pi.log_prob(a) - oldpi.log_prob(a))  # sometimes give nan
         ratio = torch.exp(pi.log_prob(a)) / (torch.exp(oldpi.log_prob(a)) + EPS)
         surr = ratio * adv
@@ -218,19 +252,20 @@ class PPO(object):
         closs.backward()
         self.critic_optimizer.step()
 
-    def update(self):
+    def update(self, s, a, r):
         '''
         Update parameter with the constraint of KL divergent
         :return: None
         '''
-        s = torch.Tensor(self.state_buffer).to(device)     
-        a = torch.Tensor(self.action_buffer).to(device) 
-        r = torch.Tensor(self.cumulative_reward_buffer).to(device)   
+        s = torch.Tensor(s).to(device)
+        a = torch.Tensor(a).to(device)
+        r = torch.Tensor(r).to(device)
+        r = (r - r.mean()) / (r.std() + 1e-5)  # normalization, can be critical
         with torch.no_grad():
             mean, std = self.actor(s)
             pi = torch.distributions.Normal(mean, std)
             adv = r - self.critic(s)
-        # adv = (adv - adv.mean())/(adv.std()+1e-6)  # sometimes helpful
+        # adv = (adv - adv.mean())/(adv.std()+1e-6)  #  choose reward normalizaiton above or advantage normalization here
 
         # update actor
         if METHOD['name'] == 'kl_pen':
@@ -252,11 +287,6 @@ class PPO(object):
         # update critic
         for _ in range(C_UPDATE_STEPS):
             self.c_train(r, s) 
-
-        self.state_buffer.clear()
-        self.action_buffer.clear()
-        self.cumulative_reward_buffer.clear()
-        self.reward_buffer.clear()
 
     def choose_action(self, s, deterministic=False):
         '''
@@ -289,37 +319,6 @@ class PPO(object):
         self.actor.eval()
         self.critic.eval()
 
-    def store_transition(self, state, action, reward):
-        """
-        Store state, action, reward at each step
-        :param state:
-        :param action:
-        :param reward:
-        :return: None
-        """
-        self.state_buffer.append(state)
-        self.action_buffer.append(action)
-        self.reward_buffer.append(reward)
-
-    def finish_path(self, next_state, done):
-        """
-        Calculate cumulative reward
-        :param next_state:
-        :return: None
-        """
-        if done:
-            v_s_ = 0
-        else:
-            v_s_ = self.critic(torch.Tensor([next_state]).to(device)).cpu().detach().numpy()[0, 0]
-        discounted_r = []
-        for r in self.reward_buffer[::-1]:
-            v_s_ = r + GAMMA * v_s_   # no future reward if next state is terminal
-            discounted_r.append(v_s_)
-        discounted_r.reverse()
-        discounted_r = np.array(discounted_r)[:, np.newaxis]
-        self.cumulative_reward_buffer.extend(discounted_r)
-        self.reward_buffer.clear()
-
 def ShareParameters(adamoptim):
     ''' share parameters of Adamoptimizers for multiprocessing '''
     for group in adamoptim.param_groups:
@@ -341,36 +340,46 @@ def plot(rewards):
     plt.savefig('ppo_multi.png')
     # plt.show()
     plt.clf()
+    plt.close()
 
 def worker(id, ppo, rewards_queue):
-    env = gym.make(ENV_NAME).unwrapped
+    env = gym.make(ENV_NAME)
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
 
-    all_ep_r = []
     for ep in range(EP_MAX):
         s = env.reset()
+        buffer_s, buffer_a, buffer_r = [], [], []
         ep_r = 0
         t0 = time.time()
         for t in range(EP_LEN):  # in one episode
             # env.render()
             a = ppo.choose_action(s)
             s_, r, done, _ = env.step(a)
-            ppo.store_transition(s, a, (r+8)/8)  # useful for pendulum
+            buffer_s.append(s)
+            buffer_a.append(a)
+            buffer_r.append(r)
             s = s_
             ep_r += r
-
             # update ppo
-            if len(ppo.state_buffer) == BATCH:
-                ppo.finish_path(s_, done)
-                ppo.update()
+            if (t+1) % BATCH == 0 or t == EP_LEN - 1 or done:
+                if done:
+                    v_s_ = 0
+                else:
+                    v_s_ = ppo.critic(torch.Tensor([s_]).to(device)).cpu().detach().numpy()[0, 0]
+                discounted_r = []
+                for r in buffer_r[::-1]:
+                    v_s_ = r + GAMMA * v_s_
+                    discounted_r.append(v_s_)
+                discounted_r.reverse()
+                bs = buffer_s if len(buffer_s[0].shape)>1 else np.vstack(buffer_s) # no vstack for raw-pixel input
+                ba, br = np.vstack(buffer_a), np.array(discounted_r)[:, np.newaxis]
+                buffer_s, buffer_a, buffer_r = [], [], []
+                ppo.update(bs, ba, br)
+
             if done:
                 break
-        ppo.finish_path(s_, done)
-        if ep == 0:
-            all_ep_r.append(ep_r)
-        else:
-            all_ep_r.append(all_ep_r[-1] * 0.9 + ep_r * 0.1)
+
         if ep%50==0:
             ppo.save_model(MODEL_PATH)
         print(
@@ -389,11 +398,11 @@ def main():
     np.random.seed(RANDOMSEED)
     torch.manual_seed(RANDOMSEED)
 
-    env = gym.make(ENV_NAME).unwrapped
+    env = gym.make(ENV_NAME)
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
 
-    ppo = PPO(state_dim, action_dim, hidden_dim=128)
+    ppo = PPO(state_dim, action_dim, hidden_dim=HIDDEN_DIM)
 
     if args.train:
         ppo.actor.share_memory()
@@ -432,11 +441,14 @@ def main():
         ppo.load_model(MODEL_PATH)
         while True:
             s = env.reset()
+            eps_r=0
             for i in range(EP_LEN):
                 env.render()
                 s, r, done, _ = env.step(ppo.choose_action(s, True))
+                eps_r+=r
                 if done:
                     break
+            print('Episode reward: {}  | Episode length: {}'.format(eps_r, i))
 if __name__ == '__main__':
     main()
     

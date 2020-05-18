@@ -3,7 +3,7 @@
 
 **PyTorch** and **Tensorflow 2.0** implementation of state-of-the-art model-free reinforcement learning algorithms on both Openai gym environments and a self-implemented Reacher environment. 
 
-Algorithms include **Soft Actor-Critic (SAC), Deep Deterministic Policy Gradient (DDPG), Twin Delayed DDPG (TD3), Actor-Critic (AC/A2C), Proximal Policy Optimization (PPO), QT-Opt (including Cross-entropy (CE) Method)**, **PointNet**, **Transporter**, **Recurrent Policy Gradient**, etc.
+Algorithms include **Soft Actor-Critic (SAC), Deep Deterministic Policy Gradient (DDPG), Twin Delayed DDPG (TD3), Actor-Critic (AC/A2C), Proximal Policy Optimization (PPO), QT-Opt (including Cross-entropy (CE) Method)**, **PointNet**, **Transporter**, **Recurrent Policy Gradient**, **Soft Decision Tree**, etc.
 
 Please note that this repo is more of a personal collection of algorithms I implemented and tested during my research and study period, rather than an official open-source library/package for usage. However, I think it could be helpful to share it with others and I'm expecting useful discussions on my implementations. But I didn't spend much time on cleaning or structuring the code. As you may notice that there may be several versions of implementation for each algorithm, I intentionally show all of them here for you to refer and compare. Also, this repo contains only **PyTorch** Implementation.
 
@@ -42,7 +42,16 @@ Since Tensorflow 2.0 has already incorporated the dynamic graph construction ins
    paper: https://arxiv.org/pdf/1802.09477.pdf
 
 * **Proximal Policy Optimization (PPO)**:
-  Todo
+  
+  For continuous environments, two versions are implemented:
+  
+  Version 1: `ppo_continuous.py` and `ppo_continuous_multiprocess.py` 
+  
+  Version 2: `ppo_continuous2.py` and `ppo_continuous_multiprocess2.py` 
+  
+  For discrete environment:
+  
+  `ppo_gae_discrete.py`: with Generalized Advantage Estimation (GAE)
 
 * **Actor-Critic (AC) / A2C**:
 
@@ -50,7 +59,9 @@ Since Tensorflow 2.0 has already incorporated the dynamic graph construction ins
 
    A very extensible version of vanilla AC/A2C, supporting for all continuous/discrete deterministic/non-deterministic cases.
 
-* Two versions of **QT-Opt** are implemented [here](https://github.com/quantumiracle/QT_Opt).
+* **QT-Opt**:
+
+   Two versions are implemented [here](https://github.com/quantumiracle/QT_Opt).
 
 * **PointNet** for landmarks generation from images with unsupervised learning is implemented [here](https://github.com/quantumiracle/PointNet_Landmarks_from_Image/tree/master). This method is also used for image-based reinforcement learning as a SOTA algorithm, called **Transporter**.
 
@@ -72,6 +83,10 @@ Since Tensorflow 2.0 has already incorporated the dynamic graph construction ins
 
   [Sim-to-Real Transfer of Robotic Control with Dynamics Randomization](https://arxiv.org/abs/1710.06537)
   
+ * **Soft Decision Tree** as function approximator for PPO:
+ 
+   `sdt_ppo_gae_discrete.py`: replace the network layers of policy in PPO to be a [Soft Decision Tree](https://arxiv.org/abs/1711.09784), for achieving explainable RL.
+ 
  * **Maximum a Posteriori Policy Optimisation (MPO)**:
  
     todo

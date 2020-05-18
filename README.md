@@ -5,9 +5,15 @@
 
 Algorithms include **Soft Actor-Critic (SAC), Deep Deterministic Policy Gradient (DDPG), Twin Delayed DDPG (TD3), Actor-Critic (AC/A2C), Proximal Policy Optimization (PPO), QT-Opt (including Cross-entropy (CE) Method)**, **PointNet**, **Transporter**, **Recurrent Policy Gradient**, etc.
 
-This repo only contains **PyTorch** Implementation.
+Please note that this repo is more of a personal collection of algorithms I implemented and tested during my research and study period, rather than an official open-source library/package for usage. However, I think it could be helpful to share it with others and I'm expecting useful discussions on my implementations. But I didn't spend much time on cleaning or structuring the code. As you may notice that there may be several versions of implementation for each algorithm, I intentionally show all of them here for you to refer and compare. Also, this repo contains only **PyTorch** Implementation.
 
-[**Here**](https://github.com/tensorlayer/tensorlayer/tree/reinforcement-learning/examples/reinforcement_learning) is my **Tensorflow 2.0 + Tensorlayer 2.0** implementation as tutorials with simple structures. And [**here**](https://github.com/tensorlayer/RLzoo) is a baseline implementation with high-level API supporting a variety of popular environments, also with Tensorflow 2.0 + Tensorlayer 2.0.
+For official libraries of RL algorithms, I provided the following two with **TensorFlow 2.0 + TensorLayer 2.0**:
+
+* [**RL Tutorial**](https://github.com/tensorlayer/tensorlayer/tree/reinforcement-learning/examples/reinforcement_learning) (*Status: Released*) contains RL algorithms implementation as tutorials with simple structures. 
+
+* [**RLzoo**](https://github.com/tensorlayer/RLzoo) (*Status: Released*) is a baseline implementation with high-level API supporting a variety of popular environments, with more hierarchical structures for simple usage.
+
+Since Tensorflow 2.0 has already incorporated the dynamic graph construction instead of the static one, it becomes a trivial work to transfer the RL code between TensorFlow and PyTorch.
 
 ## Contents:
 

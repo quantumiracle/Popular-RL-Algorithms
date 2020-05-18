@@ -143,7 +143,7 @@ class PolicyNetwork(nn.Module):
         std = log_std.exp()
         
         normal = Normal(0, 1)
-        z      = normal.sample()
+        z      = normal.sample(mean.shape)
         action = torch.tanh(mean+ std*z.to(device))
         log_prob = Normal(mean, std).log_prob(mean+ std*z.to(device)) - torch.log(1 - action.pow(2) + epsilon)
         log_prob = log_prob.sum(dim=-1, keepdim=True)
@@ -156,7 +156,7 @@ class PolicyNetwork(nn.Module):
         std = log_std.exp()
         
         normal = Normal(0, 1)
-        z      = normal.sample().to(device)
+        z      = normal.sample(mean.shape).to(device)
         action = torch.tanh(mean + std*z)
         
         action  = action.cpu()#.detach().cpu().numpy()
@@ -186,7 +186,6 @@ def update(batch_size,gamma=0.99,soft_tau=1e-2,):
     target_q_value = reward + (1 - done) * gamma * target_value
     q_value_loss1 = soft_q_criterion1(predicted_q_value1, target_q_value.detach())
     q_value_loss2 = soft_q_criterion2(predicted_q_value2, target_q_value.detach())
-    print('pre q 1: ', predicted_q_value1[0] )
 
     soft_q_optimizer1.zero_grad()
     q_value_loss1.backward()
@@ -197,9 +196,6 @@ def update(batch_size,gamma=0.99,soft_tau=1e-2,):
 # Training Value Function
     predicted_new_q_value = torch.min(soft_q_net1(state, new_action),soft_q_net2(state, new_action))
     target_value_func = predicted_new_q_value - log_prob
-    # print('t v: ', target_value_func[0])
-    # print('p n q v: ', predicted_new_q_value[0])
-    print(predicted_value, target_value_func)
     value_loss = value_criterion(predicted_value, target_value_func.detach())
 
     
@@ -212,11 +208,6 @@ def update(batch_size,gamma=0.99,soft_tau=1e-2,):
     policy_optimizer.zero_grad()
     policy_loss.backward()
     policy_optimizer.step()
-    # print('reward: ', reward)
-    print('value_loss: ', value_loss)
-    print('q loss: ', q_value_loss1, q_value_loss2)
-    print('policy loss: ', policy_loss )
-    
     
     for target_param, param in zip(target_value_net.parameters(), value_net.parameters()):
         target_param.data.copy_(
@@ -230,18 +221,6 @@ env = NormalizedActions(gym.make("Pendulum-v0"))
 
 action_dim = env.action_space.shape[0]
 state_dim  = env.observation_space.shape[0]
-
-# NUM_JOINTS=2
-# LINK_LENGTH=[200, 140]
-# INI_JOING_ANGLES=[0.1, 0.1]
-# SCREEN_SIZE=1000
-# SPARSE_REWARD=False
-# SCREEN_SHOT=False
-# DETERMINISTIC=False
-# env=Reacher(screen_size=SCREEN_SIZE, num_joints=NUM_JOINTS, link_lengths = LINK_LENGTH, \
-# ini_joint_angles=INI_JOING_ANGLES, target_pos = [369,430], render=True)
-# action_dim = env.num_actions
-# state_dim  = env.num_observations
 
 hidden_dim = 512
 

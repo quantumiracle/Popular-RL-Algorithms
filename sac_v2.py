@@ -175,7 +175,7 @@ class PolicyNetwork(nn.Module):
         std = log_std.exp() # no clip in evaluation, clip affects gradients flow
         
         normal = Normal(0, 1)
-        z      = normal.sample() 
+        z      = normal.sample(mean.shape) 
         action_0 = torch.tanh(mean + std*z.to(device)) # TanhNormal distribution as actions; reparameterization trick
         action = self.action_range*action_0
         # The log-likelihood here is for the TanhNorm distribution instead of only Gaussian distribution. \
@@ -202,7 +202,7 @@ class PolicyNetwork(nn.Module):
         std = log_std.exp()
         
         normal = Normal(0, 1)
-        z      = normal.sample().to(device)
+        z      = normal.sample(mean.shape).to(device)
         action = self.action_range* torch.tanh(mean + std*z)
         
         action = self.action_range* torch.tanh(mean).detach().cpu().numpy()[0] if deterministic else action.detach().cpu().numpy()[0]
@@ -391,7 +391,7 @@ if __name__ == '__main__':
                     next_state, reward, done, _ = env.step(action, SPARSE_REWARD, SCREEN_SHOT)
                 else:
                     next_state, reward, done, _ = env.step(action)
-                    env.render()       
+                    # env.render()       
                     
                 replay_buffer.push(state, action, reward, next_state, done)
                 

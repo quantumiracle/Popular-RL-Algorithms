@@ -286,7 +286,7 @@ class PolicyNetwork(nn.Module):
         std = log_std.exp() # no clip in evaluation, clip affects gradients flow
         
         normal = Normal(0, 1)
-        z = normal.sample()
+        z = normal.sample(mean.shape)
         action_0 = torch.tanh(mean + std * z.cuda())  # TanhNormal distribution as actions; reparameterization trick
         action = self.action_range * action_0
         log_prob = Normal(mean, std).log_prob(mean + std * z.cuda()) - torch.log(
@@ -304,7 +304,7 @@ class PolicyNetwork(nn.Module):
         std = log_std.exp()
         
         normal = Normal(0, 1)
-        z = normal.sample().cuda()
+        z = normal.sample(mean.shape).cuda()
         action = self.action_range * torch.tanh(mean + std * z)
 
         action = self.action_range * torch.tanh(mean).detach().cpu().numpy()[0] if deterministic else \
@@ -568,7 +568,6 @@ def plot(rewards):
 if __name__ == '__main__':
 
     replay_buffer_size = 1e6
-    # replay_buffer = ReplayBuffer(replay_buffer_size)
 
     # the replay buffer is a class, have to use torch manager to make it a proxy for sharing across processes
     BaseManager.register('ReplayBuffer', ReplayBuffer)

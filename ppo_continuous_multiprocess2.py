@@ -5,7 +5,8 @@ Several tricks need to be careful in multiprocess PPO:
 
 * As PPO takes online training, the buffer contains sequential samples from rollouts,
 so the buffer CANNOT be shared across processes, the sequece orders will be disturbed 
-if the buffer is feeding with samples from different processes at the same time.
+if the buffer is feeding with samples from different processes at the same time. Each process
+can main its own buffer.
 
 * A larger batch size usually ensures the stable training of PPO, also the update steps 
 for both actor and critic need to be large if the training batch is large, because the agent
@@ -405,7 +406,7 @@ def main():
     ppo = PPO(state_dim, action_dim, hidden_dim=HIDDEN_DIM)
 
     if args.train:
-        ppo.actor.share_memory()
+        ppo.actor.share_memory() # this only shares memory, not the buffer for policy training
         ppo.critic.share_memory()
         ShareParameters(ppo.actor_optimizer)
         ShareParameters(ppo.critic_optimizer)

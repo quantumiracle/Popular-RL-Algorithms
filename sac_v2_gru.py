@@ -300,9 +300,10 @@ if __name__ == '__main__':
             elif ENV == 'Pendulum':
                 state =  env.reset()
             episode_reward = 0
-            hidden_out = (torch.zeros([1, 1, hidden_dim], dtype=torch.float).cuda(), \
-                torch.zeros([1, 1, hidden_dim], dtype=torch.float).cuda())  # initialize hidden state for lstm, (hidden, cell), each is (layer, batch, dim)
-            
+            # hidden_out = (torch.zeros([1, 1, hidden_dim], dtype=torch.float).cuda(), \
+            #     torch.zeros([1, 1, hidden_dim], dtype=torch.float).cuda())  # initialize hidden state for lstm, (hidden, cell), each is (layer, batch, dim)
+            hidden_out = torch.zeros([1, 1, hidden_dim], dtype=torch.float).cuda()
+      
             for step in range(max_steps):
                 hidden_in = hidden_out
                 action, hidden_out = sac_trainer.policy_net.get_action(state, last_action, hidden_in, deterministic = DETERMINISTIC)

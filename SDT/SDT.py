@@ -111,6 +111,10 @@ class SDT(nn.Module):
         _path_prob = _path_prob.view(batch_size, 2**(layer_idx+1))
         for node in range(0, 2**(layer_idx+1)):
             alpha = torch.sum(_path_prob[:, node]*_mu[:,node//2], dim=0) / torch.sum(_mu[:,node//2], dim=0)
+            # if alpha ==1 or alpha ==  0, log will cause numerical problem, so alpha should be bounded
+            bound_value = 1e-7  # smaller than 1e-10 will still cause numerical problem
+            alpha = torch.clamp(alpha, bound_value, 1-bound_value)
+            
             penalty -= self.penalty_list[layer_idx] * 0.5 * (torch.log(alpha) + torch.log(1-alpha))
         return penalty
     

@@ -28,7 +28,7 @@ class SDT(nn.Module):
             beta = torch.randn(self.inner_node_num)
             self.beta = nn.Parameter(beta)
         else:
-            self.beta = torch.ones(self.inner_node_num)
+            self.beta = torch.ones(1).to(self.device)   # or use one beta across all nodes
 
         # leaf nodes operation
         # p*softmax(Q) instead of softmax(p*Q)

@@ -72,13 +72,14 @@ class PPO(nn.Module):
             advantage_lst.reverse()
             advantage = torch.tensor(advantage_lst, dtype=torch.float)
 
-            pi = self.pi(s, softmax_dim=1)
+            pi = self.pi(s, softmax_dim=-1)
+            dist_entropy = Categorical(pi).entropy()
             pi_a = pi.gather(1,a)
             ratio = torch.exp(torch.log(pi_a) - torch.log(prob_a))  # a/b == exp(log(a)-log(b))
 
             surr1 = ratio * advantage
             surr2 = torch.clamp(ratio, 1-eps_clip, 1+eps_clip) * advantage
-            loss = -torch.min(surr1, surr2) + F.smooth_l1_loss(self.v(s) , td_target.detach())
+            loss = -torch.min(surr1, surr2) + F.smooth_l1_loss(self.v(s) , td_target.detach()) - 0.01*dist_entropy 
 
             self.optimizer.zero_grad()
             loss.mean().backward()
@@ -90,6 +91,7 @@ def main():
     action_dim = env.action_space.n  # discrete
     model = PPO(state_dim, action_dim)
     score = 0.0
+    epi_len = []
     print_interval = 20
 
     for n_epi in range(10000):
@@ -111,9 +113,9 @@ def main():
                     break
 
             model.train_net()
-
+        epi_len.append(t)
         if n_epi%print_interval==0 and n_epi!=0:
-            print("# of episode :{}, avg score : {:.1f}".format(n_epi, score/print_interval))
+            print("# of episode :{}, avg score : {:.1f}, avg epi length :{}".format(n_epi, score/print_interval, int(np.mean(epi_len)))
             score = 0.0
 
     env.close()

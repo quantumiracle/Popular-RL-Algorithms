@@ -148,10 +148,10 @@ To cite this repository:
 ```
 @misc{rlalgorithms,
   author = {Zihan Ding},
-  title = {SOTA-RL-Algorithms},
+  title = {Popular-RL-Algorithms},
   year = {2019},
   publisher = {GitHub},
   journal = {GitHub repository},
-  howpublished = {\url{https://github.com/quantumiracle/SOTA-RL-Algorithms}},
+  howpublished = {\url{https://github.com/quantumiracle/Popular-RL-Algorithms}},
 }
 ```

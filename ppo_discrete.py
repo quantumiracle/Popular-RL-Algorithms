@@ -1,5 +1,5 @@
 """
-Proximal Policy Optimization for discrete (action space) environments, via the Generalized Advantage Estimation (GAE).
+Proximal Policy Optimization for discrete (action space) environments, without GAE.
 """
 import gym
 import torch

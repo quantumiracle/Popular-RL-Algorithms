@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions import Categorical
+import numpy as np
 
 #Hyperparameters
 learning_rate = 0.0005
@@ -118,8 +119,9 @@ def main():
             model.train_net()
         epi_len.append(t)
         if n_epi%print_interval==0 and n_epi!=0:
-            print("# of episode :{}, avg score : {:.1f}, avg epi length :{}".format(n_epi, score/print_interval, int(np.mean(epi_len)))
+            print("# of episode :{}, avg score : {:.1f}, avg epi length :{}".format(n_epi, score/print_interval, int(np.mean(epi_len))))
             score = 0.0
+            epi_len = []
 
     env.close()
 

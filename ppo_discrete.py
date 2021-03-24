@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions import Categorical
+import numpy as np
 
 #Hyperparameters
 learning_rate = 0.0005
@@ -25,6 +26,7 @@ class PPO(nn.Module):
         self.fc_pi = nn.Linear(256,action_dim)
         self.fc_v  = nn.Linear(256,1)
         self.optimizer = optim.Adam(self.parameters(), lr=learning_rate)
+        self.mseLoss = nn.MSELoss()
 
     def pi(self, x, softmax_dim = 0):
         x = F.relu(self.fc1(x))
@@ -50,30 +52,34 @@ class PPO(nn.Module):
             r_lst.append([r])
             s_prime_lst.append(s_prime)
             prob_a_lst.append([prob_a])
-            done_mask = 0 if done else 1
-            done_lst.append([done_mask])
+            done_lst.append([int(done)])
             
-        s,a,r,s_prime,done_mask, prob_a = torch.tensor(s_lst, dtype=torch.float), torch.tensor(a_lst), \
+        s,a,r,s_prime,done, prob_a = torch.tensor(s_lst, dtype=torch.float), torch.tensor(a_lst), \
                                           torch.tensor(r_lst), torch.tensor(s_prime_lst, dtype=torch.float), \
                                           torch.tensor(done_lst, dtype=torch.float), torch.tensor(prob_a_lst)
         self.data = []
-        return s, a, r, s_prime, done_mask, prob_a
+        return s, a, r, s_prime, done, prob_a
         
     def train_net(self):
-        s, a, r, s_prime, done_mask, prob_a = self.make_batch()
+        s, a, r, s_prime, done, prob_a = self.make_batch()
 
-        for i in range(K_epoch):
-            td_target = r + gamma * self.v(s_prime) * done_mask
-            delta = td_target - self.v(s)
-            delta = delta.detach().numpy()
+        rewards = []
+        discounted_r = 0
+        for reward, d in zip(reversed(r), reversed(done)):
+            if d:
+                discounted_r = 0
+            discounted_r = reward + gamma * discounted_r
+            rewards.insert(0, discounted_r)
+            # rewards.append(discounted_r)
+        rewards = torch.tensor(rewards, dtype=torch.float32)
+        if rewards.shape[0]>1:  # a batch with size 1 will cause 0 std 
+            rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-5)
+        rewards = rewards.unsqueeze(dim=-1)
 
-            advantage_lst = []
-            advantage = 0.0
-            for delta_t in delta[::-1]:
-                advantage = gamma * lmbda * advantage + delta_t[0]
-                advantage_lst.append([advantage])
-            advantage_lst.reverse()
-            advantage = torch.tensor(advantage_lst, dtype=torch.float)
+        for _ in range(K_epoch):
+            vs = self.v(s)
+            advantage = rewards - vs.detach()
+            vs_target = rewards
 
             pi = self.pi(s, softmax_dim=-1)
             dist_entropy = Categorical(pi).entropy()
@@ -82,7 +88,8 @@ class PPO(nn.Module):
 
             surr1 = ratio * advantage
             surr2 = torch.clamp(ratio, 1-eps_clip, 1+eps_clip) * advantage
-            loss = -torch.min(surr1, surr2) + F.smooth_l1_loss(self.v(s) , td_target.detach()) - 0.01*dist_entropy 
+            # loss = -torch.min(surr1, surr2) + F.smooth_l1_loss(self.v(s) , vs_target.detach()) - 0.01*dist_entropy 
+            loss = -torch.min(surr1, surr2) + 0.5*self.mseLoss(vs , vs_target.detach()) - 0.01*dist_entropy
 
             self.optimizer.zero_grad()
             loss.mean().backward()
@@ -118,8 +125,9 @@ def main():
             model.train_net()
         epi_len.append(t)
         if n_epi%print_interval==0 and n_epi!=0:
-            print("# of episode :{}, avg score : {:.1f}, avg epi length :{}".format(n_epi, score/print_interval, int(np.mean(epi_len)))
+            print("# of episode :{}, avg score : {:.3f}, avg epi length :{}".format(n_epi, score/print_interval, int(np.mean(epi_len))))
             score = 0.0
+            epi_len = []
 
     env.close()
 

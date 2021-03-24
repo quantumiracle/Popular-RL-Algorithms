@@ -69,8 +69,8 @@ class PPO(nn.Module):
             if d:
                 discounted_r = 0
             discounted_r = reward + gamma * discounted_r
-            rewards.insert(0, discounted_r)
-            # rewards.append(discounted_r)
+            rewards.insert(0, discounted_r)  # insert in front, cannot use append
+
         rewards = torch.tensor(rewards, dtype=torch.float32)
         if rewards.shape[0]>1:  # a batch with size 1 will cause 0 std 
             rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-5)

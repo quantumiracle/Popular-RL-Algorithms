@@ -48,10 +48,10 @@ class PPO(nn.Module):
             s, a, r, s_prime, prob_a, done = transition
             
             s_lst.append(s)
-            a_lst.append([a])
+            a_lst.append(a)
             r_lst.append([r])
             s_prime_lst.append(s_prime)
-            prob_a_lst.append([prob_a])
+            prob_a_lst.append(prob_a)
             done_lst.append([int(done)])
             
         s,a,r,s_prime,done, prob_a = torch.tensor(s_lst, dtype=torch.float), torch.tensor(a_lst), \
@@ -74,22 +74,23 @@ class PPO(nn.Module):
         rewards = torch.tensor(rewards, dtype=torch.float32)
         if rewards.shape[0]>1:  # a batch with size 1 will cause 0 std 
             rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-5)
-        rewards = rewards.unsqueeze(dim=-1)
+        rewards = rewards
 
         for _ in range(K_epoch):
             vs = self.v(s)
-            advantage = rewards - vs.detach()
+            advantage = rewards - vs.squeeze(dim=-1).detach()
             vs_target = rewards
 
             pi = self.pi(s, softmax_dim=-1)
-            dist_entropy = Categorical(pi).entropy()
-            pi_a = pi.gather(1,a)
-            ratio = torch.exp(torch.log(pi_a) - torch.log(prob_a))  # a/b == exp(log(a)-log(b))
+            dist = Categorical(pi)
+            dist_entropy = dist.entropy()
+            log_p = dist.log_prob(a)
+            ratio = torch.exp(log_p - torch.log(prob_a))  # a/b == exp(log(a)-log(b))
 
             surr1 = ratio * advantage
             surr2 = torch.clamp(ratio, 1-eps_clip, 1+eps_clip) * advantage
             # loss = -torch.min(surr1, surr2) + F.smooth_l1_loss(self.v(s) , vs_target.detach()) - 0.01*dist_entropy 
-            loss = -torch.min(surr1, surr2) + 0.5*self.mseLoss(vs , vs_target.detach()) - 0.01*dist_entropy
+            loss = -torch.min(surr1, surr2) + 0.5*self.mseLoss(vs.squeeze(dim=-1) , vs_target.detach()) - 0.01*dist_entropy
 
             self.optimizer.zero_grad()
             loss.mean().backward()

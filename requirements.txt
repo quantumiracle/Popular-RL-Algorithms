@@ -109,7 +109,7 @@ python-dateutil==2.7.5
 python-utils==2.3.0
 pytz==2018.7
 PyWavelets==1.0.2
-PyYAML==5.1
+PyYAML==5.4
 pyzmq==18.0.1
 qtconsole==4.4.3
 -e git+https://github.com/GOAL-Robots/REALCompetitionStartingKit.git@98467074888ae4398ae06366a00b1db3849a52f0#egg=REALComp

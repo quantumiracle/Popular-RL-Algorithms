@@ -7,6 +7,6 @@ ramble_sac.md
 *.png
 *.npy
 POMDP/model
-POMDP/gym-pomdp-wrappers
+# POMDP/gym-pomdp-wrappers
 
 

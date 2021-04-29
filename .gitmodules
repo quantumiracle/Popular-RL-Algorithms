@@ -1,0 +1,7 @@
+[submodule "POMDP/gym-pomdp-wrappers"] 
+  path = POMDP/gym-pomdp-wrappers 
+  url = https://github.com/d3sm0/gym_pomdp.git
+
+[submodule "POMDP/gym_pomdp"] 
+  path = POMDP/gym_pomdp
+  url = https://github.com/d3sm0/gym_pomdp.git

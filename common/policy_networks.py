@@ -18,7 +18,10 @@ class PolicyNetworkBase(nn.Module):
             pass  
         self._action_space = action_space
         self._action_shape = action_space.shape
-        self._action_dim = self._action_shape[0]
+        if len(self._action_shape) < 1:  # Discrete space
+            self._action_dim = action_space.n
+        else:
+            self._action_dim = self._action_shape[0]
         self.action_range = action_range
 
     def forward(self):

@@ -390,8 +390,7 @@ model_path = './model/pmoe'
 pmoe_trainer=PMOE_Trainer(replay_buffer, hidden_dim=hidden_dim, K=K, action_range=action_range  )
 
 if __name__ == '__main__':
-    # if args.train:
-    if True:
+    if args.train:
         # training loop
         for eps in range(max_episodes):
             if ENV == 'Reacher':
@@ -410,7 +409,7 @@ if __name__ == '__main__':
                     next_state, reward, done, _ = env.step(action, SPARSE_REWARD, SCREEN_SHOT)
                 else:
                     next_state, reward, done, _ = env.step(action)
-                    env.render()
+                    # env.render()
 
                 replay_buffer.push(state, action, reward, next_state, done)
 
@@ -449,7 +448,7 @@ if __name__ == '__main__':
                     next_state, reward, done, _ = env.step(action, SPARSE_REWARD, SCREEN_SHOT)
                 else:
                     next_state, reward, done, _ = env.step(action)
-                    env.render()
+                    # env.render()
 
 
                 episode_reward += reward

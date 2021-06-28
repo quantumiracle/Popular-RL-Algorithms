@@ -1,0 +1,457 @@
+'''
+Probabilistic Mixture-of-Experts
+paper: https://arxiv.org/abs/2104.09122
+'''
+
+import argparse
+import random
+
+import gym
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+from IPython.display import clear_output
+from torch.distributions import Normal, Categorical
+
+from reacher import Reacher
+
+GPU = True
+device_idx = 0
+if GPU:
+    device = torch.device("cuda:" + str(device_idx) if torch.cuda.is_available() else "cpu")
+else:
+    device = torch.device("cpu")
+print(device)
+
+
+parser = argparse.ArgumentParser(description='Train or test neural net motor controller.')
+parser.add_argument('--train', dest='train', action='store_true', default=False)
+parser.add_argument('--test', dest='test', action='store_true', default=False)
+
+args = parser.parse_args()
+
+
+class ReplayBuffer:
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.buffer = []
+        self.position = 0
+
+    def push(self, state, action, reward, next_state, done):
+        if len(self.buffer) < self.capacity:
+            self.buffer.append(None)
+        self.buffer[self.position] = (state, action, reward, next_state, done)
+        self.position = int((self.position + 1) % self.capacity)  # as a ring buffer
+
+    def sample(self, batch_size):
+        batch = random.sample(self.buffer, batch_size)
+        state, action, reward, next_state, done = map(np.stack, zip(*batch)) # stack for each element
+        ''' 
+        the * serves as unpack: sum(a,b) <=> batch=(a,b), sum(*batch) ;
+        zip: a=[1,2], b=[2,3], zip(a,b) => [(1, 2), (2, 3)] ;
+        the map serves as mapping the function on each list element: map(square, [2,3]) => [4,9] ;
+        np.stack((1,2)) => array([1, 2])
+        '''
+        return state, action, reward, next_state, done
+
+    def __len__(self):
+        return len(self.buffer)
+
+class NormalizedActions(gym.ActionWrapper):
+    def action(self, action):
+        low  = self.action_space.low
+        high = self.action_space.high
+
+        action = low + (action + 1.0) * 0.5 * (high - low)
+        action = np.clip(action, low, high)
+
+        return action
+
+    def _reverse_action(self, action):
+        low  = self.action_space.low
+        high = self.action_space.high
+
+        action = 2 * (action - low) / (high - low) - 1
+        action = np.clip(action, low, high)
+
+        return action
+
+
+class ValueNetwork(nn.Module):
+    def __init__(self, state_dim, hidden_dim, init_w=3e-3):
+        super(ValueNetwork, self).__init__()
+
+        self.linear1 = nn.Linear(state_dim, hidden_dim)
+        self.linear2 = nn.Linear(hidden_dim, hidden_dim)
+        self.linear3 = nn.Linear(hidden_dim, hidden_dim)
+        self.linear4 = nn.Linear(hidden_dim, 1)
+        # weights initialization
+        self.linear4.weight.data.uniform_(-init_w, init_w)
+        self.linear4.bias.data.uniform_(-init_w, init_w)
+
+    def forward(self, state):
+        x = F.relu(self.linear1(state))
+        x = F.relu(self.linear2(x))
+        x = F.relu(self.linear3(x))
+        x = self.linear4(x)
+        return x
+
+
+class SoftQNetwork(nn.Module):
+    def __init__(self, num_inputs, num_actions, hidden_size, init_w=3e-3):
+        super(SoftQNetwork, self).__init__()
+
+        self.linear1 = nn.Linear(num_inputs + num_actions, hidden_size)
+        self.linear2 = nn.Linear(hidden_size, hidden_size)
+        self.linear3 = nn.Linear(hidden_size, hidden_size)
+        self.linear4 = nn.Linear(hidden_size, 1)
+
+        self.linear4.weight.data.uniform_(-init_w, init_w)
+        self.linear4.bias.data.uniform_(-init_w, init_w)
+
+    def forward(self, state, action, repeat=False):
+        if repeat:
+            state = state.unsqueeze(1).repeat(1, action.shape[1], 1)
+        x = torch.cat([state, action], -1) # the dim 0 is number of samples
+        x = x.reshape(-1, x.shape[-1])
+        x = F.relu(self.linear1(x))
+        x = F.relu(self.linear2(x))
+        x = F.relu(self.linear3(x))
+        x = self.linear4(x)
+        if repeat:
+            return x.reshape(-1, action.shape[1])
+        else:
+            return x
+
+
+class PolicyNetwork(nn.Module):
+    def __init__(self, num_inputs, num_actions, hidden_size, K, action_range=1., init_w=3e-3, log_std_min=-20, log_std_max=2):
+        super(PolicyNetwork, self).__init__()
+        self.K = K
+
+        self.log_std_min = log_std_min
+        self.log_std_max = log_std_max
+
+        self.linear1 = nn.Linear(num_inputs, hidden_size)
+        self.linear2 = nn.Linear(hidden_size, hidden_size)
+        self.linear3 = nn.Linear(hidden_size, hidden_size)
+        self.linear4 = nn.Linear(hidden_size, hidden_size)
+
+        self.mean_linear = nn.Linear(hidden_size, num_actions * K)
+        self.mean_linear.weight.data.uniform_(-init_w, init_w)
+        self.mean_linear.bias.data.uniform_(-init_w, init_w)
+
+        self.log_std_linear = nn.Linear(hidden_size, num_actions * K)
+        self.log_std_linear.weight.data.uniform_(-init_w, init_w)
+        self.log_std_linear.bias.data.uniform_(-init_w, init_w)
+
+        self.mixing_coefficient_linear = nn.Sequential(nn.Linear(num_inputs, K), nn.Softmax(-1))
+
+        self.action_range = action_range
+        self.num_actions = num_actions
+
+
+    def forward(self, state):
+        mixing_coefficient = self.mixing_coefficient_linear(state)
+
+        x = F.relu(self.linear1(state))
+        x = F.relu(self.linear2(x))
+        x = F.relu(self.linear3(x))
+        x = F.relu(self.linear4(x))
+
+        mean    = (self.mean_linear(x))
+        # mean    = F.leaky_relu(self.mean_linear(x))
+        log_std = self.log_std_linear(x)
+        log_std = torch.clamp(log_std, self.log_std_min, self.log_std_max)
+
+        return mixing_coefficient, mean.reshape(mean.shape[0], self.K, -1), log_std.reshape(log_std.shape[0], self.K, -1)
+
+    def evaluate(self, state, epsilon=1e-6):
+        '''
+        generate sampled action with state as input wrt the policy network;
+        '''
+        mixing_coefficient, mean, log_std = self.forward(state)
+        std = log_std.exp() # no clip in evaluation, clip affects gradients flow
+
+        normal = Normal(0, 1)
+        z      = normal.sample(mean.shape)
+        action_0 = torch.tanh(mean + std*z.to(device)) # TanhNormal distribution as actions; reparameterization trick
+        action = self.action_range*action_0
+        # The log-likelihood here is for the TanhNorm distribution instead of only Gaussian distribution. \
+        # The TanhNorm forces the Gaussian with infinite action range to be finite. \
+        # For the three terms in this log-likelihood estimation: \
+        # (1). the first term is the log probability of action as in common \
+        # stochastic Gaussian action policy (without Tanh); \
+        # (2). the second term is the caused by the Tanh(), \
+        # as shown in appendix C. Enforcing Action Bounds of https://arxiv.org/pdf/1801.01290.pdf, \
+        # the epsilon is for preventing the negative cases in log; \
+        # (3). the third term is caused by the action range I used in this code is not (-1, 1) but with \
+        # an arbitrary action range, which is slightly different from original paper.
+        log_prob = Normal(mean, std).log_prob(mean+ std*z.to(device)) - torch.log(1. - action_0.pow(2) + epsilon) -  np.log(self.action_range)
+        # both dims of normal.log_prob and -log(1-a**2) are (N,dim_of_action); 
+        # the Normal.log_prob outputs the same dim of input features instead of 1 dim probability, 
+        # needs sum up across the features dim to get 1 dim prob; or else use Multivariate Normal.
+        log_prob = log_prob.sum(dim=-1, keepdim=True)
+        return mixing_coefficient, action, log_prob, z, mean, log_std
+
+
+    def get_action(self, state, deterministic):
+        state = torch.FloatTensor(state).unsqueeze(0).to(device)
+        mixing_coefficient, mean, log_std = self.forward(state)
+        std = log_std.exp()
+
+        normal = Normal(0, 1)
+        z      = normal.sample(mean.shape).to(device)
+        action = self.action_range* torch.tanh(mean + std*z)
+
+        action = self.action_range* torch.tanh(mean).detach().cpu().numpy()[0] if deterministic else action.detach().cpu().numpy()[0]
+        index = Categorical(mixing_coefficient).sample()
+        action = action[index]
+        return action
+
+
+    def sample_action(self,):
+        a=torch.FloatTensor(self.num_actions).uniform_(-1, 1)
+        return self.action_range*a.numpy()
+
+
+class PMOE_Trainer():
+    def __init__(self, replay_buffer, hidden_dim, K, action_range):
+        self.replay_buffer = replay_buffer
+
+        self.soft_q_net1 = SoftQNetwork(state_dim, action_dim, hidden_dim).to(device)
+        self.soft_q_net2 = SoftQNetwork(state_dim, action_dim, hidden_dim).to(device)
+        self.target_soft_q_net1 = SoftQNetwork(state_dim, action_dim, hidden_dim).to(device)
+        self.target_soft_q_net2 = SoftQNetwork(state_dim, action_dim, hidden_dim).to(device)
+        self.policy_net = PolicyNetwork(state_dim, action_dim, hidden_dim, K, action_range).to(device)
+        self.log_alpha = torch.zeros(1, dtype=torch.float32, requires_grad=True, device=device)
+        print('Soft Q Network (1,2): ', self.soft_q_net1)
+        print('Policy Network: ', self.policy_net)
+
+        for target_param, param in zip(self.target_soft_q_net1.parameters(), self.soft_q_net1.parameters()):
+            target_param.data.copy_(param.data)
+        for target_param, param in zip(self.target_soft_q_net2.parameters(), self.soft_q_net2.parameters()):
+            target_param.data.copy_(param.data)
+
+        self.soft_q_criterion1 = nn.MSELoss()
+        self.soft_q_criterion2 = nn.MSELoss()
+
+        soft_q_lr = 3e-4
+        policy_lr = 3e-4
+        alpha_lr  = 3e-4
+
+        self.soft_q_optimizer1 = optim.Adam(self.soft_q_net1.parameters(), lr=soft_q_lr)
+        self.soft_q_optimizer2 = optim.Adam(self.soft_q_net2.parameters(), lr=soft_q_lr)
+        self.policy_optimizer = optim.Adam(self.policy_net.parameters(), lr=policy_lr)
+        self.alpha_optimizer = optim.Adam([self.log_alpha], lr=alpha_lr)
+
+
+    def update(self, batch_size, reward_scale=10., auto_entropy=True, target_entropy=-2, gamma=0.99,soft_tau=1e-2):
+        state, action, reward, next_state, done = self.replay_buffer.sample(batch_size)
+        # print('sample:', state, action,  reward, done)
+
+        state      = torch.FloatTensor(state).to(device)
+        next_state = torch.FloatTensor(next_state).to(device)
+        action     = torch.FloatTensor(action).to(device)
+        reward     = torch.FloatTensor(reward).unsqueeze(1).to(device)  # reward is single value, unsqueeze() to add one dim to be [reward] at the sample dim;
+        done       = torch.FloatTensor(np.float32(done)).unsqueeze(1).to(device)
+
+        # Updating alpha wrt entropy
+        # alpha = 0.0  # trade-off between exploration (max entropy) and exploitation (max Q)
+        if auto_entropy is True:
+            self.alpha = self.log_alpha.exp().detach()
+        else:
+            self.alpha = 1.
+
+        predicted_q_value1 = self.soft_q_net1(state, action)
+        predicted_q_value2 = self.soft_q_net2(state, action)
+        new_mixing_coefficient, new_action, log_prob, z, mean, log_std = self.policy_net.evaluate(state)
+        new_next_mixing_coefficient, new_next_action, next_log_prob, _, _, _ = self.policy_net.evaluate(next_state)
+        new_next_index = Categorical(new_next_mixing_coefficient).sample().unsqueeze(-1)
+        new_next_action = torch.gather(new_next_action, 1, new_next_index.unsqueeze(-1).repeat(1, 1, new_next_action.shape[-1])).squeeze(1)
+        next_log_prob = torch.gather(next_log_prob.squeeze(-1), 1, new_next_index)
+        reward = reward_scale * (reward - reward.mean(dim=0)) / (reward.std(dim=0) + 1e-6) # normalize with batch mean and std; plus a small number to prevent numerical problem
+
+    # Training Q Function
+        target_q_min = torch.min(self.target_soft_q_net1(next_state, new_next_action),self.target_soft_q_net2(next_state, new_next_action)) - self.alpha * next_log_prob
+        target_q_value = reward + (1 - done) * gamma * target_q_min # if done==1, only reward
+        q_value_loss1 = self.soft_q_criterion1(predicted_q_value1, target_q_value.detach())  # detach: no gradients for the variable
+        q_value_loss2 = self.soft_q_criterion2(predicted_q_value2, target_q_value.detach())
+
+
+        self.soft_q_optimizer1.zero_grad()
+        q_value_loss1.backward()
+        self.soft_q_optimizer1.step()
+        self.soft_q_optimizer2.zero_grad()
+        q_value_loss2.backward()
+        self.soft_q_optimizer2.step()
+
+    # Training Policy Function
+        predicted_new_q_value = torch.min(self.soft_q_net1(state, new_action, True),self.soft_q_net2(state, new_action, True))
+        predicted_new_q_value, best_index = predicted_new_q_value.max(1)
+        mixing_coefficient_loss = F.mse_loss(new_mixing_coefficient, F.one_hot(best_index, self.policy_net.K).float())
+        policy_loss = (self.alpha * torch.gather(log_prob.squeeze(-1), 1, best_index.unsqueeze(-1)).squeeze(1) - predicted_new_q_value).mean() + mixing_coefficient_loss
+
+        self.policy_optimizer.zero_grad()
+        policy_loss.backward()
+        self.policy_optimizer.step()
+
+        # Updating alpha wrt entropy
+        # alpha = 0.0  # trade-off between exploration (max entropy) and exploitation (max Q)
+        if auto_entropy is True:
+            alpha_loss = -(self.log_alpha * (torch.gather(log_prob.squeeze(-1), 1, best_index.unsqueeze(-1)).squeeze(1) + target_entropy).detach()).mean()
+            # print('alpha loss: ',alpha_loss)
+            self.alpha_optimizer.zero_grad()
+            alpha_loss.backward()
+            self.alpha_optimizer.step()
+            self.alpha = self.log_alpha.exp()
+        else:
+            self.alpha = 1.
+            alpha_loss = 0
+
+        # print('q loss: ', q_value_loss1, q_value_loss2)
+        # print('policy loss: ', policy_loss )
+
+
+    # Soft update the target value net
+        for target_param, param in zip(self.target_soft_q_net1.parameters(), self.soft_q_net1.parameters()):
+            target_param.data.copy_(  # copy data value into target parameters
+                target_param.data * (1.0 - soft_tau) + param.data * soft_tau
+            )
+        for target_param, param in zip(self.target_soft_q_net2.parameters(), self.soft_q_net2.parameters()):
+            target_param.data.copy_(  # copy data value into target parameters
+                target_param.data * (1.0 - soft_tau) + param.data * soft_tau
+            )
+        return predicted_new_q_value.mean()
+
+    def save_model(self, path):
+        torch.save(self.soft_q_net1.state_dict(), path+'_q1')
+        torch.save(self.soft_q_net2.state_dict(), path+'_q2')
+        torch.save(self.policy_net.state_dict(), path+'_policy')
+
+    def load_model(self, path):
+        self.soft_q_net1.load_state_dict(torch.load(path+'_q1'))
+        self.soft_q_net2.load_state_dict(torch.load(path+'_q2'))
+        self.policy_net.load_state_dict(torch.load(path+'_policy'))
+
+        self.soft_q_net1.eval()
+        self.soft_q_net2.eval()
+        self.policy_net.eval()
+
+
+def plot(rewards):
+    clear_output(True)
+    plt.figure(figsize=(20,5))
+    plt.plot(rewards)
+    plt.savefig('pmoe.png')
+    # plt.show()
+
+
+replay_buffer_size = 1e6
+replay_buffer = ReplayBuffer(replay_buffer_size)
+
+# choose env
+ENV = ['Reacher', 'Pendulum-v0', 'HalfCheetah-v2'][1]
+if ENV == 'Reacher':
+    NUM_JOINTS=2
+    LINK_LENGTH=[200, 140]
+    INI_JOING_ANGLES=[0.1, 0.1]
+    SCREEN_SIZE=1000
+    SPARSE_REWARD=False
+    SCREEN_SHOT=False
+    action_range = 10.0
+    env=Reacher(screen_size=SCREEN_SIZE, num_joints=NUM_JOINTS, link_lengths = LINK_LENGTH, \
+    ini_joint_angles=INI_JOING_ANGLES, target_pos = [369,430], render=True, change_goal=False)
+    action_dim = env.num_actions
+    state_dim  = env.num_observations
+else:
+    env = NormalizedActions(gym.make(ENV))
+    action_dim = env.action_space.shape[0]
+    state_dim  = env.observation_space.shape[0]
+    action_range=1.
+
+# hyper-parameters for RL training
+max_episodes  = 1000
+max_steps   = 20 if ENV ==  'Reacher' else 150  # Pendulum needs 150 steps per episode to learn well, cannot handle 20
+frame_idx   = 0
+batch_size  = 300
+explore_steps = 0  # for random action sampling in the beginning of training
+update_itr = 1
+AUTO_ENTROPY=True
+DETERMINISTIC=False
+hidden_dim = 512
+K = 4
+rewards     = []
+model_path = './model/pmoe'
+
+pmoe_trainer=PMOE_Trainer(replay_buffer, hidden_dim=hidden_dim, K=K, action_range=action_range  )
+
+if __name__ == '__main__':
+    if args.train:
+        # training loop
+        for eps in range(max_episodes):
+            if ENV == 'Reacher':
+                state = env.reset(SCREEN_SHOT)
+            else:
+                state =  env.reset()
+            episode_reward = 0
+
+
+            for step in range(max_steps):
+                if frame_idx > explore_steps:
+                    action = pmoe_trainer.policy_net.get_action(state, deterministic = DETERMINISTIC)
+                else:
+                    action = pmoe_trainer.policy_net.sample_action()
+                if ENV ==  'Reacher':
+                    next_state, reward, done, _ = env.step(action, SPARSE_REWARD, SCREEN_SHOT)
+                else:
+                    next_state, reward, done, _ = env.step(action)
+                    # env.render()
+
+                replay_buffer.push(state, action, reward, next_state, done)
+
+                state = next_state
+                episode_reward += reward
+                frame_idx += 1
+
+
+                if len(replay_buffer) > batch_size:
+                    for i in range(update_itr):
+                        _=pmoe_trainer.update(batch_size, reward_scale=10., auto_entropy=AUTO_ENTROPY, target_entropy=-1.*action_dim)
+
+                if done:
+                    break
+
+            if eps % 20 == 0 and eps>0: # plot and model saving interval
+                plot(rewards)
+                np.save('rewards', rewards)
+                pmoe_trainer.save_model(model_path)
+            print('Episode: ', eps, '| Episode Reward: ', episode_reward)
+            rewards.append(episode_reward)
+        pmoe_trainer.save_model(model_path)
+
+    if args.test:
+        pmoe_trainer.load_model(model_path)
+        for eps in range(10):
+            if ENV == 'Reacher':
+                state = env.reset(SCREEN_SHOT)
+            else:
+                state =  env.reset()
+            episode_reward = 0
+
+            for step in range(max_steps):
+                action = pmoe_trainer.policy_net.get_action(state, deterministic = DETERMINISTIC)
+                if ENV ==  'Reacher':
+                    next_state, reward, done, _ = env.step(action, SPARSE_REWARD, SCREEN_SHOT)
+                else:
+                    next_state, reward, done, _ = env.step(action)
+                    # env.render()
+
+
+                episode_reward += reward
+                state=next_state
+
+            print('Episode: ', eps, '| Episode Reward: ', episode_reward)

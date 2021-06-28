@@ -63,6 +63,7 @@ class ReplayBuffer:
 class NormalizedActions(gym.ActionWrapper):
     def action(self, action):
         return self._action(action)
+
     def _action(self, action):
         low  = self.action_space.low
         high = self.action_space.high

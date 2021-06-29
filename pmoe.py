@@ -252,11 +252,10 @@ class PMOE_Trainer():
 
     def update(self, batch_size, reward_scale=10., auto_entropy=True, target_entropy=-2, gamma=0.99, soft_tau=1e-2):
         state, action, reward, next_state, done = self.replay_buffer.sample(batch_size)
-        # print('sample:', state, action,  reward, done)
 
         state = torch.FloatTensor(state).to(device)
         next_state = torch.FloatTensor(next_state).to(device)
-        action = torch.FloatTensor(action).to(device)
+        action = torch.FloatTensor(action).to(device
         reward = torch.FloatTensor(reward).unsqueeze(1).to(
             device)  # reward is single value, unsqueeze() to add one dim to be [reward] at the sample dim;
         done = torch.FloatTensor(np.float32(done)).unsqueeze(1).to(device)
@@ -319,9 +318,6 @@ class PMOE_Trainer():
         else:
             self.alpha = 1.
             alpha_loss = 0
-
-        # print('q loss: ', q_value_loss1, q_value_loss2)
-        # print('policy loss: ', policy_loss )
 
         # Soft update the target value net
         for target_param, param in zip(self.target_soft_q_net1.parameters(), self.soft_q_net1.parameters()):

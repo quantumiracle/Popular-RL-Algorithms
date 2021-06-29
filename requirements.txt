@@ -7,7 +7,7 @@ attrs==19.1.0
 backcall==0.1.0
 -e git+https://github.com/openai/baselines.git@c57528573ea695b19cd03e98dae48f0082fb2b5e#egg=baselines
 bayesian-optimization==1.0.0
-bleach==3.1.0
+bleach==3.3.0
 Box2D==2.3.2
 Box2D-kengz==2.3.3
 cached-property==1.5.1

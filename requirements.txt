@@ -93,7 +93,7 @@ prometheus-client==0.6.0
 prompt-toolkit==2.0.9
 protobuf==3.9.0
 ptyprocess==0.6.0
-py==1.8.0
+py==1.10.0
 pybullet==2.5.0
 pycparser==2.19
 pygame==1.9.4

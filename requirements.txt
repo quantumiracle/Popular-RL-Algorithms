@@ -7,7 +7,7 @@ attrs==19.1.0
 backcall==0.1.0
 -e git+https://github.com/openai/baselines.git@c57528573ea695b19cd03e98dae48f0082fb2b5e#egg=baselines
 bayesian-optimization==1.0.0
-bleach==3.3.0
+bleach==3.1.0
 Box2D==2.3.2
 Box2D-kengz==2.3.3
 cached-property==1.5.1
@@ -45,7 +45,7 @@ ipython-genutils==0.2.0
 ipywidgets==7.4.2
 iso8601==0.1.12
 jedi==0.13.3
-Jinja2==2.11.3
+Jinja2==2.10.1
 joblib==0.13.0
 jsonschema==3.0.1
 jupyter==1.0.0
@@ -57,7 +57,7 @@ Keras-Preprocessing==1.0.5
 kiwisolver==1.0.1
 Lasagne==0.2.dev1
 lockfile==0.12.2
-lxml==4.6.3
+lxml==4.2.6
 Mako==1.0.7
 Markdown==3.0.1
 MarkupSafe==1.1.0
@@ -72,8 +72,8 @@ multipledispatch==0.6.0
 nbconvert==5.5.0
 nbformat==4.4.0
 networkx==1.8.1
-nltk==3.4.5
-notebook==5.7.8
+nltk==3.4.1
+notebook==6.1.5
 numdifftools==0.9.20
 numpy==1.15.4
 opencv-python==3.4.5.20

@@ -3,7 +3,7 @@
 
 **PyTorch** and **Tensorflow 2.0** implementation of state-of-the-art model-free reinforcement learning algorithms on both Openai gym environments and a self-implemented Reacher environment. 
 
-Algorithms include **Soft Actor-Critic (SAC), Deep Deterministic Policy Gradient (DDPG), Twin Delayed DDPG (TD3), Actor-Critic (AC/A2C), Proximal Policy Optimization (PPO), QT-Opt (including Cross-entropy (CE) Method)**, **PointNet**, **Transporter**, **Recurrent Policy Gradient**, **Soft Decision Tree**, etc.
+Algorithms include **Soft Actor-Critic (SAC), Deep Deterministic Policy Gradient (DDPG), Twin Delayed DDPG (TD3), Actor-Critic (AC/A2C), Proximal Policy Optimization (PPO), QT-Opt (including Cross-entropy (CE) Method)**, **PointNet**, **Transporter**, **Recurrent Policy Gradient**, **Soft Decision Tree**, **Probabilistic Mixture-of-Experts**, etc.
 
 Please note that this repo is more of a personal collection of algorithms I implemented and tested during my research and study period, rather than an official open-source library/package for usage. However, I think it could be helpful to share it with others and I'm expecting useful discussions on my implementations. But I didn't spend much time on cleaning or structuring the code. As you may notice that there may be several versions of implementation for each algorithm, I intentionally show all of them here for you to refer and compare. Also, this repo contains only **PyTorch** Implementation.
 
@@ -86,6 +86,17 @@ Since Tensorflow 2.0 has already incorporated the dynamic graph construction ins
  * **Soft Decision Tree** as function approximator for PPO:
  
    `sdt_ppo_gae_discrete.py`: replace the network layers of policy in PPO to be a [Soft Decision Tree](https://arxiv.org/abs/1711.09784), for achieving explainable RL.
+   
+   paper: [CDT: Cascading Decision Trees for Explainable Reinforcement Learning
+](https://arxiv.org/abs/2011.07553)
+   
+ * **Probabilistic Mixture-of-Experts (PMOE)** :
+ 
+   `pmoe.py`: uses a differentiable multi-modal Gaussian distribution to replace the standard unimodal Gaussian distribution for policy representation.
+   
+   paper: [Probabilistic Mixture-of-Experts for Efficient Deep Reinforcement Learning
+](https://arxiv.org/pdf/2104.09122)
+
  
  * **Maximum a Posteriori Policy Optimisation (MPO)**:
  

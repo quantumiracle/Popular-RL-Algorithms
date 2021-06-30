@@ -275,8 +275,8 @@ class PMOE_Trainer():
         new_next_action = torch.gather(new_next_action, 1,
                                        new_next_index.unsqueeze(-1).repeat(1, 1, new_next_action.shape[-1])).squeeze(1)
         next_log_prob = torch.gather(next_log_prob.squeeze(-1), 1, new_next_index)
-        reward = reward_scale * (reward - reward.mean(dim=0)) / (reward.std(
-            dim=0) + 1e-6)  # normalize with batch mean and std; plus a small number to prevent numerical problem
+        reward = reward_scale * (reward - reward.mean(dim=0)) / (reward.std(dim=0) + 1e-6)
+        # normalize with batch mean and std; plus a small number to prevent numerical problem
 
         # Training Q Function
         target_q_min = torch.min(self.target_soft_q_net1(next_state, new_next_action),

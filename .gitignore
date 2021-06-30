@@ -7,6 +7,8 @@ ramble_sac.md
 *.png
 *.npy
 POMDP/model
+__pycache__
+.ipynb_checkpoints
 # POMDP/gym-pomdp-wrappers
 
 

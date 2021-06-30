@@ -358,7 +358,14 @@ else:
 
 # hyper-parameters for RL training
 max_episodes  = 1000
-max_steps   = 20 if ENV ==  'Reacher' else 150  # Pendulum needs 150 steps per episode to learn well, cannot handle 20
+if ENV ==  'Reacher':
+    max_steps = 20
+elif ENV ==  'Pendulum-v0':
+    max_steps = 150  # Pendulum needs 150 steps per episode to learn well
+elif ENV == 'HalfCheetah-v2':
+    max_steps = 1000
+else:
+    raise NotImplementedError
 frame_idx   = 0
 batch_size  = 300
 explore_steps = 0  # for random action sampling in the beginning of training

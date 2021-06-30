@@ -255,7 +255,7 @@ class PMOE_Trainer():
 
         state = torch.FloatTensor(state).to(device)
         next_state = torch.FloatTensor(next_state).to(device)
-        action = torch.FloatTensor(action).to(device
+        action = torch.FloatTensor(action).to(device)
         reward = torch.FloatTensor(reward).unsqueeze(1).to(
             device)  # reward is single value, unsqueeze() to add one dim to be [reward] at the sample dim;
         done = torch.FloatTensor(np.float32(done)).unsqueeze(1).to(device)
@@ -345,11 +345,11 @@ class PMOE_Trainer():
         self.policy_net.eval()
 
 
-def plot(rewards):
+def plot(steps, rewards):
     clear_output(True)
     plt.figure(figsize=(20, 5))
-    plt.plot(rewards)
-    plt.savefig('pmoe.png')
+    plt.plot(steps, rewards)
+    plt.savefig('img/pmoe.png')
     # plt.show()
 
 
@@ -357,7 +357,7 @@ replay_buffer_size = 1e6
 replay_buffer = ReplayBuffer(replay_buffer_size)
 
 # choose env
-ENV = ['Reacher', 'Pendulum-v0', 'HalfCheetah-v2'][1]
+ENV = ['Reacher', 'Pendulum-v0', 'HalfCheetah-v2'][2]
 if ENV == 'Reacher':
     NUM_JOINTS = 2
     LINK_LENGTH = [200, 140]
@@ -377,8 +377,9 @@ else:
     action_range = 1.
 
 # hyper-parameters for RL training
-max_episodes = 1000
-max_steps = 20 if ENV == 'Reacher' else 150  # Pendulum needs 150 steps per episode to learn well, cannot handle 20
+max_episodes = 100000
+# max_steps = 20 if ENV == 'Reacher' else 150  # Pendulum needs 150 steps per episode to learn well, cannot handle 20
+max_steps = 10000  # HalfCheetah-v2
 frame_idx = 0
 batch_size = 300
 explore_steps = 0  # for random action sampling in the beginning of training
@@ -386,14 +387,17 @@ update_itr = 1
 AUTO_ENTROPY = True
 DETERMINISTIC = False
 hidden_dim = 512
-K = 4
+K = 2
 rewards = []
+steps = []
 model_path = './model/pmoe'
 
 pmoe_trainer = PMOE_Trainer(replay_buffer, hidden_dim=hidden_dim, K=K, action_range=action_range)
 
 if __name__ == '__main__':
     if args.train:
+
+        all_steps = 0
         # training loop
         for eps in range(max_episodes):
             if ENV == 'Reacher':
@@ -428,11 +432,13 @@ if __name__ == '__main__':
                     break
 
             if eps % 20 == 0 and eps > 0:  # plot and model saving interval
-                plot(rewards)
+                plot(steps, rewards)
                 np.save('rewards', rewards)
                 pmoe_trainer.save_model(model_path)
-            print('Episode: ', eps, '| Episode Reward: ', episode_reward)
+            print('Episode: ', eps, '| Episode Reward: ', episode_reward,  '| Episode Length: ', step )
             rewards.append(episode_reward)
+            all_steps += step
+            steps.append(all_steps)  # record total frames
         pmoe_trainer.save_model(model_path)
 
     if args.test:

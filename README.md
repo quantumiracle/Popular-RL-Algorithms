@@ -166,3 +166,22 @@ To cite this repository:
   howpublished = {\url{https://github.com/quantumiracle/Popular-RL-Algorithms}},
 }
 ```
+
+## Other Resources:
+<p align="center">
+<img src="https://github.com/quantumiracle/STOA-RL-Algorithms/blob/master/img/drl_book.png" width="20%">
+</p>
+
+**Deep Reinforcement Learning: Foundamentals, Research and Applications** *Spinger Nature 2020* 
+
+is the book I edited with [Dr. Hao Dong](https://github.com/zsdonghao) and [Dr. Shanghang Zhang](https://scholar.google.com/citations?user=voqw10cAAAAJ&hl=en), which provides a wide coverage of topics in deep reinforcement learning. Details see [website](https://deepreinforcementlearningbook.org/) and [Springer webpage](https://www.springer.com/gp/book/9789811540943). To cite the book:
+```
+@book{deepRL-2020,
+ title={Deep Reinforcement Learning: Fundamentals, Research, and Applications},
+ editor={Hao Dong, Zihan Ding, Shanghang Zhang},
+ author={Hao Dong, Zihan Ding, Shanghang Zhang, Hang Yuan, Hongming Zhang, Jingqing Zhang, Yanhua Huang, Tianyang Yu, Huaqing Zhang, Ruitong Huang},
+ publisher={Springer Nature},
+ note={\url{http://www.deepreinforcementlearningbook.org}},
+ year={2020}
+}
+```

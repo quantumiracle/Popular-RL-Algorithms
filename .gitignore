@@ -4,7 +4,7 @@ test
 rdpg_batch.py
 rdpg_noTarget.py
 ramble_sac.md
-*.png
+# *.png
 *.npy
 POMDP/model
 __pycache__

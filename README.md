@@ -119,6 +119,18 @@ Since Tensorflow 2.0 has already incorporated the dynamic graph construction ins
 
 If you meet problem *"Not imlplemented Error"*, it may be due to the wrong gym version. The newest gym==0.14 won't work. Install gym==0.7 or gym==0.10 with `pip install -r requirements.txt`.
 
+## Undervalued tricks:
+
+As we all known, there are various tricks in empirical RL algorithm implementations in support the performance in practice, including hyper-parameters, normalization, network architecture or even hidden activation function, etc. I summarize some I met with the programs in this repo here:
+
+ * Environment specific: 
+    *  For `Pendulum-v0` environment in Gym, a reward pre-processing as `(r+8)/8` usually improves the learning efficiency, as [here](https://github.com/quantumiracle/Popular-RL-Algorithms/blob/7f2bb74a51cf9cbde92a6ccfa42e97dc129dd145/ppo_continuous2.py#L376)
+    Also, this environment needs the [maximum episode length](https://github.com/quantumiracle/Popular-RL-Algorithms/blob/7f2bb74a51cf9cbde92a6ccfa42e97dc129dd145/sac_v2.py#L364) to be at least 150 to learn well, too short episodes make it hard to learn.
+    * `MountainCar-v0` environment in Gym has very sparse reward (only when reaching the flag), general learning curves will be noisy; therefore some specific process may also need for this environment.
+
+ * Normalization:
+    * [Reward normalization](https://github.com/quantumiracle/Popular-RL-Algorithms/blob/7f2bb74a51cf9cbde92a6ccfa42e97dc129dd145/sac_v2.py#L262) or [advantage normalization](https://github.com/quantumiracle/Popular-RL-Algorithms/blob/881903e4aa22921f142daedfcf3dd266488405d8/ppo_gae_discrete.py#L79) in batch can have great improvements on performance (learning efficiency, stability) sometimes, although theoretically on-policy algorithms like PPO should not apply data normalization during training due to distribution shift.
+
 ## Performance:
 
 * **SAC** for gym Pendulum-v0:

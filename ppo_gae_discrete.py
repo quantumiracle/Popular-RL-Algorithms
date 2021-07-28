@@ -75,7 +75,9 @@ class PPO(nn.Module):
                 advantage_lst.append([advantage])
             advantage_lst.reverse()
             advantage = torch.tensor(advantage_lst, dtype=torch.float)
-
+            # this can have significant improvement (efficiency, stability) on performance
+            advantage = (advantage - advantage.mean()) / (advantage.std() + 1e-5) 
+            
             pi = self.pi(s, softmax_dim=-1)
             dist_entropy = Categorical(pi).entropy()
             pi_a = pi.gather(1,a)

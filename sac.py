@@ -368,7 +368,6 @@ model_path = './model/sac'
 
 if __name__ == '__main__':
     if args.train:
-        policy_net.load_state_dict(torch.load(model_path))
         # training loop
         for eps in range(max_episodes):
             if ENV == 'Reacher':

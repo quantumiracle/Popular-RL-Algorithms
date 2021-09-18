@@ -188,7 +188,7 @@ To cite this repository:
 <img src="https://github.com/quantumiracle/STOA-RL-Algorithms/blob/master/img/drl_book.png" width="20%">
 </p>
 
-**Deep Reinforcement Learning: Foundamentals, Research and Applications** *Spinger Nature 2020* 
+**Deep Reinforcement Learning: Foundamentals, Research and Applications** *Springer Nature 2020* 
 
 is the book I edited with [Dr. Hao Dong](https://github.com/zsdonghao) and [Dr. Shanghang Zhang](https://scholar.google.com/citations?user=voqw10cAAAAJ&hl=en), which provides a wide coverage of topics in deep reinforcement learning. Details see [website](https://deepreinforcementlearningbook.org/) and [Springer webpage](https://www.springer.com/gp/book/9789811540943). To cite the book:
 ```

@@ -58,6 +58,10 @@ Since Tensorflow 2.0 has already incorporated the dynamic graph construction ins
   `ac.py`: extensible AC/A2C, easy to change to be DDPG, etc.
 
    A very extensible version of vanilla AC/A2C, supporting for all continuous/discrete deterministic/non-deterministic cases.
+   
+* **DQN**:
+
+  `dqn.py`: a simple DQN.
 
 * **QT-Opt**:
 

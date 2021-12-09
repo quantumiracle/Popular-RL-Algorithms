@@ -78,13 +78,13 @@ EP_LEN = 1000  # total number of steps for each episode
 GAMMA = 0.99  # reward discount
 A_LR = 0.0001  # learning rate for actor
 C_LR = 0.0002  # learning rate for critic
-BATCH = 4096  # update batchsize
+BATCH = 4096  # update batchsize, can be larger than episode length; important for stabilize training
 A_UPDATE_STEPS = 50  # actor update steps
 C_UPDATE_STEPS = 50  # critic update steps
 HIDDEN_DIM = 64
 EPS = 1e-8  # numerical residual
 MODEL_PATH = 'model/ppo_multi'
-NUM_WORKERS=2  # or: mp.cpu_count()
+NUM_WORKERS=1  # or: mp.cpu_count()
 ACTION_RANGE = 1.  # normalized action range should be 1.
 METHOD = [
     dict(name='kl_pen', kl_target=0.01, lam=0.5),  # KL penalty
@@ -347,35 +347,40 @@ def worker(id, ppo, rewards_queue):
     env = gym.make(ENV_NAME)
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
+    total_t = 0
+    buffer_s, buffer_a, buffer_r, buffer_d = [], [], [], []
 
     for ep in range(EP_MAX):
         s = env.reset()
-        buffer_s, buffer_a, buffer_r = [], [], []
         ep_r = 0
         t0 = time.time()
         for t in range(EP_LEN):  # in one episode
             # env.render()
+            total_t += 1
             a = ppo.choose_action(s)
             s_, r, done, _ = env.step(a)
             buffer_s.append(s)
             buffer_a.append(a)
             buffer_r.append(r)
+            buffer_d.append(done)
             s = s_
             ep_r += r
+
             # update ppo
-            if (t+1) % BATCH == 0 or t == EP_LEN - 1 or done:
+            # if (t+1) % BATCH == 0 or t == EP_LEN - 1 or done:  # update once done
+            if (total_t+1) % BATCH == 0:
                 if done:
                     v_s_ = 0
                 else:
-                    v_s_ = ppo.critic(torch.Tensor([s_]).to(device)).cpu().detach().numpy()[0, 0]
+                    v_s_ = ppo.critic(torch.Tensor(np.array([s_])).to(device)).cpu().detach().numpy()[0, 0]
                 discounted_r = []
-                for r in buffer_r[::-1]:
-                    v_s_ = r + GAMMA * v_s_
+                for r, d in zip(buffer_r[::-1], buffer_d[::-1]):
+                    v_s_ = r + GAMMA * v_s_ * (1-d)
                     discounted_r.append(v_s_)
                 discounted_r.reverse()
                 bs = buffer_s if len(buffer_s[0].shape)>1 else np.vstack(buffer_s) # no vstack for raw-pixel input
                 ba, br = np.vstack(buffer_a), np.array(discounted_r)[:, np.newaxis]
-                buffer_s, buffer_a, buffer_r = [], [], []
+                buffer_s, buffer_a, buffer_r, buffer_d = [], [], [], []
                 ppo.update(bs, ba, br)
 
             if done:

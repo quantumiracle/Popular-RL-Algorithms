@@ -1,3 +1,18 @@
+"""
+Proximal Policy Optimization (PPO) version 3
+----------------------------
+1 actor and 1 critic
+
+This one is basically the same as PPO_continuous_v2 with slightly different coding style.
+It uses batch of samples for update (which can be more than an episode).
+It merge the losses of critic and actor into one update manner, using a single optimizer 
+instead of one for actor and one for critic.
+
+
+To run
+------
+python ***.py
+"""
 import torch
 import torch.nn as nn
 from torch.distributions import MultivariateNormal

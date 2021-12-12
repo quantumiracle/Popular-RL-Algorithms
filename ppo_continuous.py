@@ -151,13 +151,13 @@ class PolicyNetwork(nn.Module):
     def get_action(self, state, deterministic=False):
         state = torch.FloatTensor(state).unsqueeze(0).to(device)
         mean, log_std = self.forward(state)
-        std = log_std.exp()
-        normal = Normal(0, 1)
-        z      = normal.sample() 
+
         if deterministic:
             action = mean
         else:
-            action  = mean+std*z
+            std = log_std.exp()
+            normal = Normal(mean, std)
+            action = normal.sample() 
         action = torch.clamp(action, -self.action_range, self.action_range)
         return action.squeeze(0)
 

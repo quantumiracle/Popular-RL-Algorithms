@@ -123,7 +123,6 @@ class PPO(nn.Module):
         for i in range(K_epoch):
             td_target = r + gamma * self.v(s_prime) * done_mask
             delta = td_target - self.v(s)
-            advantage = delta
             delta = delta.detach().numpy()
 
             advantage_lst = []

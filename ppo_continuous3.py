@@ -8,7 +8,8 @@ This one is basically the same as PPO_continuous_v2 with slightly different codi
 * It merge the losses of critic and actor into one update manner, using a single optimizer 
 instead of one for actor and one for critic.
 * It uses the min of clipping value loss and non-clipping value loss.
-* It additionally has a policy entropy bonus in loss (line 145)
+* It additionally has a policy entropy bonus in loss (line 146).
+* It uses MultivariateNormal for policy distribution instead of Normal.
 
 
 To run

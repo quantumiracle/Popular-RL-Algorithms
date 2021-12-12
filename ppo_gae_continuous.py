@@ -8,12 +8,13 @@ from torch.distributions import Normal
 import numpy as np
 
 #Hyperparameters
-learning_rate = 1e-5
+learning_rate = 1e-4
 gamma         = 0.98
-lmbda         = 0.1
+lmbda         = 0.95
 eps_clip      = 0.1
+batch_size    = 4096
 K_epoch       = 3
-T_horizon     = 150
+T_horizon     = 10000
 
 class NormalizedActions(gym.ActionWrapper):
     def _action(self, action):
@@ -55,10 +56,10 @@ class PPO(nn.Module):
 
     def pi(self, x):
 
-        x = F.relu(self.linear1(x))
-        x = F.relu(self.linear2(x))
-        x1 = F.relu(self.linear3(x))
-        x2 = F.relu(self.linear4(x))
+        x = F.tanh(self.linear1(x))
+        x = F.tanh(self.linear2(x))
+        x1 = F.tanh(self.linear3(x))
+        x2 = F.tanh(self.linear4(x))
 
         mean    = F.tanh(self.mean_linear(x1))
         log_std = self.log_std_linear(x2)
@@ -66,10 +67,10 @@ class PPO(nn.Module):
         return mean, log_std
     
     def v(self, x):
-        x = F.relu(self.linear1(x))
-        x = F.relu(self.linear2(x))
-        x = F.relu(self.linear5(x))
-        x = F.relu(self.linear6(x))
+        x = F.tanh(self.linear1(x))
+        x = F.tanh(self.linear2(x))
+        x = F.tanh(self.linear5(x))
+        x = F.tanh(self.linear6(x))
 
         v = self.v_linear(x)
         return v
@@ -110,27 +111,31 @@ class PPO(nn.Module):
             done_mask = 0 if done else 1
             done_lst.append([done_mask])
         s,a,r,s_prime,done_mask, prob_a = torch.tensor(s_lst, dtype=torch.float), torch.tensor(a_lst), \
-                                          torch.tensor(r_lst), torch.tensor(s_prime_lst, dtype=torch.float), \
+                                          torch.tensor(r_lst, dtype=torch.float), torch.tensor(s_prime_lst, dtype=torch.float), \
                                           torch.tensor(done_lst, dtype=torch.float), torch.tensor(prob_a_lst)
         self.data = []
         return s, a, r, s_prime, done_mask, prob_a
         
     def train_net(self):
         s, a, r, s_prime, done_mask, prob_a = self.make_batch()
+        done_mask_ = torch.flip(done_mask, dims=(0,))
 
         for i in range(K_epoch):
             td_target = r + gamma * self.v(s_prime) * done_mask
             delta = td_target - self.v(s)
+            advantage = delta
             delta = delta.detach().numpy()
 
             advantage_lst = []
             advantage = 0.0
-            for delta_t in delta[::-1]:
-                advantage = gamma * lmbda * advantage + delta_t[0]
+            for delta_t, mask in zip(delta[::-1], done_mask_):
+                advantage = gamma * lmbda * advantage * mask + delta_t[0]
                 advantage_lst.append([advantage])
             advantage_lst.reverse()
             advantage = torch.tensor(advantage_lst, dtype=torch.float)
-            
+            if not np.isnan(advantage.std()):
+                advantage = (advantage - advantage.mean()) / (advantage.std() + 1e-5) 
+                        
             mean, log_std = self.pi(s)
             log_pi_a = self.get_log_prob(mean, log_std, a)
             # pi = self.pi(s, softmax_dim=1)
@@ -146,34 +151,36 @@ class PPO(nn.Module):
             self.optimizer.step()
         
 def main():
-    # env = gym.make('CartPole-v1')
-    env = NormalizedActions(gym.make('Pendulum-v0'))
-    # env = gym.make('HalfCheetah-v2')
+    env = gym.make('HalfCheetah-v2')
     state_dim = env.observation_space.shape[0]
     action_dim =  env.action_space.shape[0]
     hidden_dim = 128
     model = PPO(state_dim, action_dim, hidden_dim)
     score = 0.0
     print_interval = 2
+    step = 0
 
     for n_epi in range(10000):
         s = env.reset()
         done = False
         # while not done:
         for t in range(T_horizon):
+            step += 1
             a, prob = model.get_action(torch.from_numpy(s).float())
             s_prime, r, done, info = env.step(a)
             # print(a)
-            env.render()
+            # env.render()
 
             model.put_data((s, a, r, s_prime, prob, done))
             s = s_prime
 
             score += r
+
+            if (step+1) % batch_size == 0:
+                model.train_net()
+
             if done:
                 break
-
-        model.train_net()
 
         if n_epi%print_interval==0 and n_epi!=0:
             print("# of episode :{}, avg score : {:.1f}".format(n_epi, score/print_interval))

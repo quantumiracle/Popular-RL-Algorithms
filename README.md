@@ -58,6 +58,10 @@ Since Tensorflow 2.0 has already incorporated the dynamic graph construction ins
   `ac.py`: extensible AC/A2C, easy to change to be DDPG, etc.
 
    A very extensible version of vanilla AC/A2C, supporting for all continuous/discrete deterministic/non-deterministic cases.
+   
+* **DQN**:
+
+  `dqn.py`: a simple DQN.
 
 * **QT-Opt**:
 
@@ -169,6 +173,13 @@ It seems TD3 with deterministic policy works a little better, but basically simi
 </p>
 
    However, vanilla AC/A2C cannot handle the continuous case like gym Pendulum-v0 well.
+   
+* **PPO** for gym LunarLanderContinuous-v2:
+<p align="center">
+<img src="https://github.com/quantumiracle/STOA-RL-Algorithms/blob/master/img/ppo_multi.png" width="100%">
+</p>
+
+Use `ppo_continuous_multiprocess2.py`.
 
 ## Citation:
 To cite this repository:

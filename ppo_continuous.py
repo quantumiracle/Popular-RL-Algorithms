@@ -55,17 +55,17 @@ args = parser.parse_args()
 
 #####################  hyper parameters  ####################
 
-ENV_NAME = 'HalfCheetah-v2'  # environment name HalfCheetah-v2 Pendulum-v0
+ENV_NAME = 'Pendulum-v0'  # environment name HalfCheetah-v2 Pendulum-v0
 RANDOMSEED = 2  # random seed
 
-EP_MAX = 1000  # total number of episodes for training
-EP_LEN = 200  # total number of steps for each episode
-GAMMA = 0.9  # reward discount
+EP_MAX = 10000  # total number of episodes for training
+EP_LEN = 1000  # total number of steps for each episode
+GAMMA = 0.99  # reward discount
 A_LR = 0.0001  # learning rate for actor
 C_LR = 0.0002  # learning rate for critic
-BATCH = 128  # update batchsize
-A_UPDATE_STEPS = 10  # actor update steps
-C_UPDATE_STEPS = 10  # critic update steps
+BATCH = 1024  # update batchsize
+A_UPDATE_STEPS = 50  # actor update steps
+C_UPDATE_STEPS = 50  # critic update steps
 EPS = 1e-8  # numerical residual
 METHOD = [
     dict(name='kl_pen', kl_target=0.01, lam=0.5),  # KL penalty
@@ -273,9 +273,8 @@ class PPO(object):
         a = torch.FloatTensor(a).to(device) 
         r = torch.FloatTensor(r).to(device)   
 
-        self.update_old_pi()
         adv = self.cal_adv(s, r)
-        # adv = (adv - adv.mean())/(adv.std()+1e-6)  # sometimes helpful, not always, minus mean is dangerous
+        adv = (adv - adv.mean())/(adv.std()+1e-6)  # sometimes helpful, not always, minus mean is dangerous
 
         # update actor
         if METHOD['name'] == 'kl_pen':
@@ -296,7 +295,10 @@ class PPO(object):
 
         # update critic
         for _ in range(C_UPDATE_STEPS):
-            self.c_train(r, s)     
+            self.c_train(r, s)    
+            
+        self.update_old_pi()
+ 
 
     def choose_action(self, s, deterministic=False):
         '''
@@ -337,7 +339,8 @@ class PPO(object):
 
 def main():
 
-    env = NormalizedActions(gym.make(ENV_NAME).unwrapped)
+    # env = NormalizedActions(gym.make(ENV_NAME).unwrapped)
+    env = gym.make(ENV_NAME)
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
 
@@ -350,13 +353,15 @@ def main():
 
     if args.train:
         all_ep_r = []
+        buffer={
+            'state':[],
+            'action':[],
+            'reward':[],
+            'done':[]
+        }
         for ep in range(EP_MAX):
             s = env.reset()
-            buffer={
-                'state':[],
-                'action':[],
-                'reward':[]
-            }
+
             ep_r = 0
             t0 = time.time()
             for t in range(EP_LEN):  # in one episode
@@ -366,24 +371,25 @@ def main():
                 buffer['state'].append(s)
                 buffer['action'].append(a)
                 buffer['reward'].append(r) 
-                # buffer['reward'].append((r + 8) / 8)  # normalize reward, find to be useful sometimes
+                buffer['done'].append(done) 
                 s = s_
                 ep_r += r
 
                 # update ppo
-                if (t + 1) % BATCH == 0 or t == EP_LEN - 1 or done:
+                # if (t + 1) % BATCH == 0 or t == EP_LEN - 1 or done:
+                if (t + 1) % BATCH == 0:
                     if done:
                         v_s_=0
                     else:
                         v_s_ = ppo.get_v(s_)[0]
                     discounted_r = []
-                    for r in buffer['reward'][::-1]:
-                        v_s_ = r + GAMMA * v_s_
+                    for r, d in zip(buffer['reward'][::-1], buffer['done'][::-1]):
+                        v_s_ = r + GAMMA * v_s_ * (1-d)
                         discounted_r.append(v_s_)
                     discounted_r.reverse()
 
                     bs, ba, br = np.vstack(buffer['state']), np.vstack(buffer['action']), np.array(discounted_r)[:, np.newaxis]
-                    buffer['state'], buffer['action'], buffer['reward'] = [], [], []
+                    buffer['state'], buffer['action'], buffer['reward'], buffer['done'] = [], [], [], []
                     ppo.update(bs, ba, br)
 
                 if done:

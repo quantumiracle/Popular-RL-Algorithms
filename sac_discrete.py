@@ -266,8 +266,8 @@ DETERMINISTIC=False
 hidden_dim = 64
 rewards     = []
 model_path = './model/sac_discrete_v2'
-# target_entropy = -1.*action_dim
-target_entropy = 0.98 * -np.log(1 / action_dim)
+target_entropy = -1.*action_dim
+# target_entropy = 0.98 * -np.log(1 / action_dim)
 
 sac_trainer=SAC_Trainer(replay_buffer, hidden_dim=hidden_dim)
 

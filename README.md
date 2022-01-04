@@ -36,6 +36,10 @@ Since Tensorflow 2.0 has already incorporated the dynamic graph construction ins
    `sac_discrete.py`: for discrete action space.
 
     paper (the author is actually one of my classmates at IC): https://arxiv.org/abs/1910.07207
+    
+  **SAC Discrete PER**
+  
+   `sac_discrete_per.py`: for discrete action space, and with prioritized experience replay (PER).
 
 * **Deep Deterministic Policy Gradient (DDPG)**:
 

@@ -252,6 +252,7 @@ replay_buffer = ReplayBuffer(replay_buffer_size)
 
 # choose env
 env = gym.make('CartPole-v1')
+
 state_dim  = env.observation_space.shape[0]
 action_dim = env.action_space.n  # discrete
 
@@ -261,7 +262,7 @@ max_steps = 200
 frame_idx   = 0
 batch_size  = 256
 update_itr = 1
-AUTO_ENTROPY=False
+AUTO_ENTROPY=True
 DETERMINISTIC=False
 hidden_dim = 64
 rewards     = []

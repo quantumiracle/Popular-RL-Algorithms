@@ -36,6 +36,56 @@ class ReplayBuffer:
     def get_length(self):
         return len(self.buffer)
 
+class ReplayBufferPER:
+    """ 
+    Replay buffer with Prioritized Experience Replay (PER),
+    TD error as sampling weights. This is a simple version without sumtree.
+
+    Reference:
+    https://github.com/Felhof/DiscreteSAC/blob/main/utilities/ReplayBuffer.py
+    """
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.buffer = []
+        self.position = 0
+        self.weights = np.zeros(int(capacity))
+        self.max_weight = 10**-2
+        self.delta = 10**-4
+
+    def push(self, state, action, reward, next_state, done):
+        if len(self.buffer) < self.capacity:
+            self.buffer.append(None)
+        self.buffer[self.position] = (state, action, reward, next_state, done)
+        self.weights[self.position] = self.max_weight  # new sample has max weights
+
+        self.position = int((self.position + 1) % self.capacity)  # as a ring buffer
+
+    def sample(self, batch_size):
+        set_weights = self.weights[:self.position] + self.delta
+        probabilities = set_weights / sum(set_weights)
+        self.indices = np.random.choice(range(self.position), batch_size, p=probabilities, replace=False)
+        batch = np.array(self.buffer)[list(self.indices)]
+        state, action, reward, next_state, done = map(np.stack,
+                                                      zip(*batch))  # stack for each element
+        ''' 
+        the * serves as unpack: sum(a,b) <=> batch=(a,b), sum(*batch) ;
+        zip: a=[1,2], b=[2,3], zip(a,b) => [(1, 2), (2, 3)] ;
+        the map serves as mapping the function on each list element: map(square, [2,3]) => [4,9] ;
+        np.stack((1,2)) => array([1, 2])
+        '''
+        return state, action, reward, next_state, done
+
+    def update_weights(self, prediction_errors):
+        max_error = max(prediction_errors)
+        self.max_weight = max(self.max_weight, max_error)
+        self.weights[self.indices] = prediction_errors
+
+    def __len__(
+            self):  # this is a stupid func! cannot work in multiprocessing case, len(replay_buffer) is not available in proxy of manager!
+        return len(self.buffer)
+
+    def get_length(self):
+        return len(self.buffer)
 
 class ReplayBufferLSTM:
     """ 
@@ -72,9 +122,6 @@ class ReplayBufferLSTM:
 
     def get_length(self):
         return len(self.buffer)
-
-
-
 
 class ReplayBufferLSTM2:
     """ 
@@ -126,8 +173,6 @@ class ReplayBufferLSTM2:
 
     def get_length(self):
         return len(self.buffer)
-
-
 
 
 class ReplayBufferGRU:

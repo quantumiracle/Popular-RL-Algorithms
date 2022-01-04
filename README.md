@@ -17,7 +17,7 @@ Since Tensorflow 2.0 has already incorporated the dynamic graph construction ins
 
 ## Contents:
 
-* Two versions of **Soft Actor-Critic (SAC)** are implemented.
+* Multiple versions of **Soft Actor-Critic (SAC)** are implemented.
 
   **SAC Version 1**:
 
@@ -30,6 +30,12 @@ Since Tensorflow 2.0 has already incorporated the dynamic graph construction ins
    `sac_v2.py`: using target Q-value function instead of state-value function.
 
     paper: https://arxiv.org/pdf/1812.05905.pdf
+    
+  **SAC Discrete**
+  
+   `sac_discrete.py`: for discrete action space.
+
+    paper (the author is actually one of my classmates at IC): https://arxiv.org/abs/1910.07207
 
 * **Deep Deterministic Policy Gradient (DDPG)**:
 

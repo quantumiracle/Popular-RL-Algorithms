@@ -9,25 +9,17 @@ https://towardsdatascience.com/adapting-soft-actor-critic-for-discrete-action-sp
 '''
 
 
-import math
 import random
-
 import gym
 import numpy as np
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.distributions import Categorical
-
 from IPython.display import clear_output
 import matplotlib.pyplot as plt
-from matplotlib import animation
-from IPython.display import display
-
 import argparse
-import time
 
 GPU = True
 device_idx = 0
@@ -104,7 +96,7 @@ class PolicyNetwork(nn.Module):
 
         self.num_actions = num_actions
         
-    def forward(self, state, softmax_dim=0):
+    def forward(self, state, softmax_dim=-1):
         x = F.tanh(self.linear1(state))
         x = F.tanh(self.linear2(x))
         # x = F.tanh(self.linear3(x))
@@ -183,7 +175,7 @@ class SAC_Trainer():
         # reward = reward_scale * (reward - reward.mean(dim=0)) / (reward.std(dim=0) + 1e-6) # normalize with batch mean and std; plus a small number to prevent numerical problem
 
     # Training Q Function
-        # print((next_log_prob.exp()*self.target_soft_q_net2(next_state)).shape,  next_log_prob.shape)
+        self.alpha = self.log_alpha.exp()
         target_q_min = (next_log_prob.exp() * (torch.min(self.target_soft_q_net1(next_state),self.target_soft_q_net2(next_state)) - self.alpha * next_log_prob)).sum(dim=-1).unsqueeze(-1)
         target_q_value = reward + (1 - done) * gamma * target_q_min # if done==1, only reward
         q_value_loss1 = self.soft_q_criterion1(predicted_q_value1, target_q_value.detach())  # detach: no gradients for the variable
@@ -203,9 +195,21 @@ class SAC_Trainer():
         self.policy_optimizer.zero_grad()
         policy_loss.backward()
         self.policy_optimizer.step()
+
+        # Updating alpha wrt entropy
+        # alpha = 0.0  # trade-off between exploration (max entropy) and exploitation (max Q) 
+        if auto_entropy is True:
+            alpha_loss = -(self.log_alpha * (log_prob + target_entropy).detach()).mean()
+            # print('alpha loss: ',alpha_loss)
+            self.alpha_optimizer.zero_grad()
+            alpha_loss.backward()
+            self.alpha_optimizer.step()
+        else:
+            self.alpha = 1.
+            alpha_loss = 0
         
-        # print('q loss: ', q_value_loss1, q_value_loss2)
-        # print('policy loss: ', policy_loss )
+        # print('q loss: ', q_value_loss1.item(), q_value_loss2.item())
+        # print('policy loss: ', policy_loss.item() )
 
     # Soft update the target value net
         for target_param, param in zip(self.target_soft_q_net1.parameters(), self.soft_q_net1.parameters()):
@@ -216,19 +220,6 @@ class SAC_Trainer():
             target_param.data.copy_(  # copy data value into target parameters
                 target_param.data * (1.0 - soft_tau) + param.data * soft_tau
             )
-
-        # Updating alpha wrt entropy
-        # alpha = 0.0  # trade-off between exploration (max entropy) and exploitation (max Q) 
-        if auto_entropy is True:
-            alpha_loss = -(self.log_alpha * (log_prob + target_entropy).detach()).mean()
-            # print('alpha loss: ',alpha_loss)
-            self.alpha_optimizer.zero_grad()
-            alpha_loss.backward()
-            self.alpha_optimizer.step()
-            self.alpha = self.log_alpha.exp()
-        else:
-            self.alpha = 1.
-            alpha_loss = 0
             
         return predicted_new_q_value.mean()
 
@@ -266,7 +257,7 @@ action_dim = env.action_space.n  # discrete
 
 # hyper-parameters for RL training
 max_episodes  = 10000
-max_steps = 100
+max_steps = 200
 frame_idx   = 0
 batch_size  = 256
 update_itr = 1
@@ -286,7 +277,6 @@ if __name__ == '__main__':
         for eps in range(max_episodes):
             state =  env.reset()
             episode_reward = 0
-            
             
             for step in range(max_steps):
                 action = sac_trainer.policy_net.get_action(state, deterministic = DETERMINISTIC)

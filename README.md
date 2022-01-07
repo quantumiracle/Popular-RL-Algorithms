@@ -90,6 +90,8 @@ Since Tensorflow 2.0 has already incorporated the dynamic graph construction ins
   `td3_lstm.py`: TD3 with LSTM policy.
 
   `sac_v2_lstm.py`: SAC with LSTM policy.
+  
+  `sac_v2_gru.py`: SAC with GRU policy.
 
   References:
 

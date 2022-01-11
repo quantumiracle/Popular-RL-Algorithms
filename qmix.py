@@ -178,10 +178,10 @@ class RNNAgent(nn.Module):
         @brief:
             for each distributed agent, generate action for one step given input data
         @params:
-            state: [#batch, #feature*action_shape]
-            action: [#batch, action_shape]
+            state: [n_agents, n_feature]
+            last_action: [n_agents, action_shape]
         '''
-        state = torch.FloatTensor(state).unsqueeze(0).unsqueeze(0).to(device) # add #sequence and #batch        print(last_action.shape)
+        state = torch.FloatTensor(state).unsqueeze(0).unsqueeze(0).to(device) # add #sequence and #batch: [[#batch, #sequence, n_agents, n_feature]] 
         last_action = torch.LongTensor(
             last_action).unsqueeze(0).unsqueeze(0).to(device)  # add #sequence and #batch: [#batch, #sequence, n_agents, action_shape]
         hidden_in = hidden_in.unsqueeze(1) # add #batch: [#batch, n_agents, hidden_dim]
@@ -192,7 +192,7 @@ class RNNAgent(nn.Module):
             action = np.argmax(agent_outs.detach().cpu().numpy(), axis=-1)
         else:
             action = dist.sample().squeeze(0).squeeze(0).detach().cpu().numpy()  # squeeze the added #batch and #sequence dimension
-        return action, hidden_out
+        return action, hidden_out  # [n_agents, action_shape]
 
 class QMix(nn.Module):
     def __init__(self, state_dim, n_agents, action_shape, embed_dim=64, hypernet_embed=128, abs=True):
@@ -279,12 +279,13 @@ class QMix(nn.Module):
 
 
 class QMix_Trainer():
-    def __init__(self, replay_buffer, n_agents, state_dim, action_shape, action_dim, hidden_dim, hypernet_dim, lr=0.001, logger=None):
+    def __init__(self, replay_buffer, n_agents, state_dim, action_shape, action_dim, hidden_dim, hypernet_dim, target_update_interval, lr=0.001, logger=None):
         self.replay_buffer = replay_buffer
 
         self.action_dim = action_dim
         self.action_shape = action_shape
         self.n_agents = n_agents
+        self.target_update_interval = target_update_interval
         self.agent = RNNAgent(state_dim, action_shape,
                               action_dim, hidden_dim).to(device)
         self.target_agent = RNNAgent(
@@ -296,6 +297,7 @@ class QMix_Trainer():
                           hidden_dim, hypernet_dim).to(device)
         
         self._update_targets()
+        self.update_cnt = 0
         
         self.criterion = nn.MSELoss()
 
@@ -336,15 +338,14 @@ class QMix_Trainer():
         next_state = torch.FloatTensor(next_state).to(device)
         action = torch.LongTensor(action).to(device) # [#batch, sequence, #agents, #action_shape]
         last_action = torch.LongTensor(last_action).to(device)
-        # reward is scalar, add 1 dim to be [reward] at the same dim
-        reward = torch.FloatTensor(reward).unsqueeze(-1).to(device)
+        reward = torch.FloatTensor(reward).unsqueeze(-1).to(device) # reward is scalar, add 1 dim to be [reward] at the same dim
 
         agent_outs, _ = self.agent(state, last_action, hidden_in) # [#batch, #sequence, #agent, action_shape, num_actions]
         
         chosen_action_qvals = torch.gather(  # [#batch, #sequence, #agent, action_shape]
             agent_outs, dim=-1, index=action.unsqueeze(-1)).squeeze(-1)
 
-        qtot = self.mixer(chosen_action_qvals, state)
+        qtot = self.mixer(chosen_action_qvals, state) # [#batch, #sequence, 1]
 
         # target q
         target_agent_outs, _ = self.target_agent(next_state, action, hidden_out)
@@ -359,11 +360,16 @@ class QMix_Trainer():
         loss.backward()
         self.optimizer.step()
 
+        self.update_cnt += 1
+        if self.update_cnt % self.target_update_interval == 0:
+            self._update_targets()
+
         return loss.item()
 
     def _build_td_lambda_targets(self, rewards, target_qs, gamma=0.99, td_lambda=0.6):
         '''
         @params:
+            rewards: [#batch, #sequence, 1]
             target_qs: [#batch, #sequence, 1]
         '''
         ret = target_qs.new_zeros(*target_qs.shape)
@@ -400,6 +406,7 @@ if __name__ == '__main__':
     update_iter  = 1
     batch_size = 2
     save_interval = 10
+    target_update_interval = 10
     model_path = 'model/qmix'
  
     env = entombed_cooperative_v2  # this is not a valid env, reward seems to be zero-sum; for QMIX we need same reward for all agents
@@ -412,7 +419,7 @@ if __name__ == '__main__':
     print(state_dim, action_dim, n_agents)
 
     replay_buffer = ReplayBufferGRU(replay_buffer_size)
-    learner = QMix_Trainer(replay_buffer, n_agents, state_dim, action_shape, action_dim, hidden_dim, hypernet_dim)
+    learner = QMix_Trainer(replay_buffer, n_agents, state_dim, action_shape, action_dim, hidden_dim, hypernet_dim, target_update_interval)
 
     loss = None
 
@@ -448,10 +455,6 @@ if __name__ == '__main__':
 
             state = next_state
             last_action = action
-            # print("episode_state shape {}".format(np.array(episode_state).shape))
-            # print("episode_action shape {}".format(np.array(episode_action).shape))
-            # print("episode_last_action {}".format(np.array(episode_last_action)))
-            # print("episode_last_action shape {}".format(np.array(episode_last_action).shape))
 
             # break the episode
             if np.any(done):

@@ -113,6 +113,11 @@ Since Tensorflow 2.0 has already incorporated the dynamic graph construction ins
    paper: [Probabilistic Mixture-of-Experts for Efficient Deep Reinforcement Learning
 ](https://arxiv.org/pdf/2104.09122)
 
+ * **QMIX**:
+
+     `qmix.py`: a fully cooperative multi-agent RL algorithm, demo environment using [pettingzoo](https://www.pettingzoo.ml/atari/entombed_cooperative).
+
+     paper: http://proceedings.mlr.press/v80/rashid18a.html
  
  * **Maximum a Posteriori Policy Optimisation (MPO)**:
  

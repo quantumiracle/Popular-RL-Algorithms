@@ -40,7 +40,7 @@ imageio==2.4.1
 importlib-metadata==0.8
 imutils==0.5.2
 ipykernel==5.1.0
-ipython==7.5.0
+ipython==7.16.3
 ipython-genutils==0.2.0
 ipywidgets==7.4.2
 iso8601==0.1.12

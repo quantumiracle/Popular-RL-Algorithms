@@ -118,6 +118,13 @@ Since Tensorflow 2.0 has already incorporated the dynamic graph construction ins
      `qmix.py`: a fully cooperative multi-agent RL algorithm, demo environment using [pettingzoo](https://www.pettingzoo.ml/atari/entombed_cooperative).
 
      paper: http://proceedings.mlr.press/v80/rashid18a.html
+     
+ * **Phasic Policy Gradient (PPG)**:
+
+   todo
+
+   paper: [Phasic Policy Gradient](http://proceedings.mlr.press/v139/cobbe21a.html)
+     
  
  * **Maximum a Posteriori Policy Optimisation (MPO)**:
  

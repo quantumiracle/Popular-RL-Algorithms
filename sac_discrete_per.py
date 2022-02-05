@@ -20,6 +20,7 @@ from torch.distributions import Categorical
 from IPython.display import clear_output
 import matplotlib.pyplot as plt
 import argparse
+from common.buffers import ReplayBufferPER
 
 GPU = True
 device_idx = 0
@@ -36,33 +37,6 @@ parser.add_argument('--test', dest='test', action='store_true', default=False)
 
 args = parser.parse_args()
 
-
-class ReplayBuffer:
-    def __init__(self, capacity):
-        self.capacity = capacity
-        self.buffer = []
-        self.position = 0
-    
-    def push(self, state, action, reward, next_state, done):
-        if len(self.buffer) < self.capacity:
-            self.buffer.append(None)
-        self.buffer[self.position] = (state, action, reward, next_state, done)
-        self.position = int((self.position + 1) % self.capacity)  # as a ring buffer
-    
-    def sample(self, batch_size):
-        batch = random.sample(self.buffer, batch_size)
-        state, action, reward, next_state, done = map(np.stack, zip(*batch)) # stack for each element
-        ''' 
-        the * serves as unpack: sum(a,b) <=> batch=(a,b), sum(*batch) ;
-        zip: a=[1,2], b=[2,3], zip(a,b) => [(1, 2), (2, 3)] ;
-        the map serves as mapping the function on each list element: map(square, [2,3]) => [4,9] ;
-        np.stack((1,2)) => array([1, 2])
-        '''
-        return state, action, reward, next_state, done
-    
-    def __len__(self):
-        return len(self.buffer)
-        
 class SoftQNetwork(nn.Module):
     def __init__(self, num_inputs, num_actions, hidden_size, init_w=3e-3):
         super(SoftQNetwork, self).__init__()
@@ -144,8 +118,8 @@ class SAC_Trainer():
         for target_param, param in zip(self.target_soft_q_net2.parameters(), self.soft_q_net2.parameters()):
             target_param.data.copy_(param.data)
 
-        self.soft_q_criterion1 = nn.MSELoss()
-        self.soft_q_criterion2 = nn.MSELoss()
+        self.soft_q_criterion1 = nn.MSELoss(reduction="none")
+        self.soft_q_criterion2 = nn.MSELoss(reduction="none")
 
         soft_q_lr = 3e-4
         policy_lr = 3e-4
@@ -180,12 +154,14 @@ class SAC_Trainer():
         target_q_value = reward + (1 - done) * gamma * target_q_min # if done==1, only reward
         q_value_loss1 = self.soft_q_criterion1(predicted_q_value1, target_q_value.detach())  # detach: no gradients for the variable
         q_value_loss2 = self.soft_q_criterion2(predicted_q_value2, target_q_value.detach())
+        weight_update = [min(l1.item(), l2.item()) for l1, l2 in zip(q_value_loss1, q_value_loss2)]
+        self.replay_buffer.update_weights(weight_update)  # update sample weights with td error
 
         self.soft_q_optimizer1.zero_grad()
-        q_value_loss1.backward()
+        q_value_loss1.mean().backward()
         self.soft_q_optimizer1.step()
         self.soft_q_optimizer2.zero_grad()
-        q_value_loss2.backward()
+        q_value_loss2.mean().backward()
         self.soft_q_optimizer2.step()  
 
     # Training Policy Function
@@ -248,7 +224,7 @@ def plot(rewards):
 
 
 replay_buffer_size = 1e6
-replay_buffer = ReplayBuffer(replay_buffer_size)
+replay_buffer = ReplayBufferPER(replay_buffer_size)
 
 # choose env
 env = gym.make('CartPole-v1')

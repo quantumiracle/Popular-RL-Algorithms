@@ -294,7 +294,7 @@ class TD3_Trainer():
         self.q_optimizer2.step()
 
         if self.update_cnt%self.policy_target_update_interval==0:
-
+        # This is the **Delayed** update of policy and all targets (for Q and policy). 
         # Training Policy Function
             ''' implementation 1 '''
             # predicted_new_q_value = torch.min(self.q_net1(state, new_action),self.q_net2(state, new_action))

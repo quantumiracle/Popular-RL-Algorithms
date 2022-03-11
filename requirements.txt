@@ -86,7 +86,7 @@ path.py==11.5.0
 pathlib2==2.3.3
 pexpect==4.7.0
 pickleshare==0.7.5
-Pillow==8.2.0
+Pillow==9.0.1
 pluggy==0.9.0
 progressbar2==3.38.0
 prometheus-client==0.6.0

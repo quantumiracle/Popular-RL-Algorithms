@@ -28,7 +28,7 @@ For official libraries of RL algorithms, I provided the following two with **Ten
 * [**RLzoo**](https://github.com/tensorlayer/RLzoo) (*Status: Released*) is a baseline implementation with high-level API supporting a variety of popular environments, with more hierarchical structures for simple usage.
 
 For multi-agent RL, a new repository is built (**PyTorch**):
-* [**MARS**](https://github.com/quantumiracle/MARS) (*Status: WIP*) is a library for multi-agent games, like PettingZoo Atari, SlimeVolleyBall, etc.
+* [**MARS**](https://github.com/quantumiracle/MARS) (*Status: WIP*) is a library for multi-agent RL on games, like PettingZoo Atari, SlimeVolleyBall, etc.
 
 Since Tensorflow 2.0 has already incorporated the dynamic graph construction instead of the static one, it becomes a trivial work to transfer the RL code between TensorFlow and PyTorch.
 

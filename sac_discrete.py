@@ -198,10 +198,7 @@ class SAC_Trainer():
         with torch.no_grad():
             predicted_new_q_value = torch.min(self.soft_q_net1(state),self.soft_q_net2(state))
         policy_loss = (log_prob.exp()*(self.alpha * log_prob - predicted_new_q_value)).sum(dim=-1).mean()
-        if torch.isnan(policy_loss):
-            print(log_prob, predicted_new_q_value, state)
-            print('q: ', q_value_loss1, q_value_loss2, target_q_value, target_q_min, next_log_prob, predicted_q_value1, predicted_q_value2)
-
+        
         self.policy_optimizer.zero_grad()
         policy_loss.backward()
         self.policy_optimizer.step()

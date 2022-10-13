@@ -9,11 +9,11 @@ import numpy as np
 
 #Hyperparameters
 learning_rate = 1e-4
-gamma         = 0.98
+gamma         = 0.99
 lmbda         = 0.95
 eps_clip      = 0.1
 batch_size    = 4096
-K_epoch       = 3
+K_epoch       = 20
 T_horizon     = 10000
 
 class NormalizedActions(gym.ActionWrapper):
@@ -50,6 +50,8 @@ class PPO(nn.Module):
 
         self.mean_linear = nn.Linear(hidden_size, num_actions)      
         self.log_std_linear = nn.Linear(hidden_size, num_actions)
+        # self.log_std_param = nn.Parameter(torch.zeros(num_actions))
+
         self.v_linear = nn.Linear(hidden_size, 1)
 
         self.optimizer = optim.Adam(self.parameters(), lr=learning_rate)
@@ -63,6 +65,7 @@ class PPO(nn.Module):
 
         mean    = F.tanh(self.mean_linear(x1))
         log_std = self.log_std_linear(x2)
+        # log_std = self.log_std_param.expand_as(mean)
 
         return mean, log_std
     
@@ -129,27 +132,24 @@ class PPO(nn.Module):
         s, a, r, s_prime, done_mask, prob_a = self.make_batch()
         done_mask_ = torch.flip(done_mask, dims=(0,))
 
-        for i in range(K_epoch):
-            td_target = r + gamma * self.v(s_prime) * done_mask
-            delta = td_target - self.v(s)
-            delta = delta.detach().numpy()
+        # put target value computation before epoch update reduce computation and stabilize training
+        td_target = r + gamma * self.v(s_prime) * done_mask
+        delta = td_target - self.v(s)
+        delta = delta.detach().numpy()
 
-            advantage_lst = []
-            advantage = 0.0
-            for delta_t, mask in zip(delta[::-1], done_mask_):
-                advantage = gamma * lmbda * advantage * mask + delta_t[0]
-                advantage_lst.append([advantage])
-            advantage_lst.reverse()
-            advantage = torch.tensor(advantage_lst, dtype=torch.float)
-            if not np.isnan(advantage.std()):
-                advantage = (advantage - advantage.mean()) / (advantage.std() + 1e-5) 
-                        
+        advantage_lst = []
+        advantage = 0.0
+        for delta_t, mask in zip(delta[::-1], done_mask_):
+            advantage = gamma * lmbda * advantage * mask + delta_t[0]
+            advantage_lst.append([advantage])
+        advantage_lst.reverse()
+        advantage = torch.tensor(advantage_lst, dtype=torch.float)
+        if not np.isnan(advantage.std()):
+            advantage = (advantage - advantage.mean()) / (advantage.std() + 1e-5) 
+
+        for i in range(K_epoch):            
             mean, log_std = self.pi(s)
-            try:
-                log_pi_a = self.get_log_prob(mean, log_std, a)
-            except:
-                print(s, a)
-                print(mean, log_std)
+            log_pi_a = self.get_log_prob(mean, log_std, a)
             # pi = self.pi(s, softmax_dim=1)
             # pi_a = pi.gather(1,a)
             ratio = torch.exp(log_pi_a - torch.log(prob_a))  # a/b == exp(log(a)-log(b))

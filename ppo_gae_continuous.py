@@ -78,12 +78,21 @@ class PPO(nn.Module):
     def get_action(self, x):
         mean, log_std = self.pi(x)
         std = log_std.exp()
-        normal = Normal(0, 1)
-        z      = normal.sample()
-        action = mean + std*z
-        log_prob = Normal(mean, std).log_prob(action)
-        log_prob = log_prob.sum(dim=-1, keepdim=True)  # reduce dim
+        normal = Normal(mean, std)
+        action = normal.sample()
+        log_prob = normal.log_prob(action).sum(-1)
         prob = log_prob.exp()
+
+        ## The following way of generating action seems not correct. 
+        ## All dimensions of action depends on the same hidden variable z.
+        ## In some envs like Ant-v2, it may let the agent not fall easity due to the correlation of actions.
+        ## But this does not in general holds true, and may cause numerical problem (nan) in update.
+        # normal = Normal(0, 1)  
+        # z      = normal.sample()
+        # action = mean + std*z
+        # log_prob = Normal(mean, std).log_prob(action)
+        # log_prob = log_prob.sum(dim=-1, keepdim=True)  # reduce dim
+        # prob = log_prob.exp()
 
         action = self.action_range*action # scale the action
 
@@ -136,7 +145,11 @@ class PPO(nn.Module):
                 advantage = (advantage - advantage.mean()) / (advantage.std() + 1e-5) 
                         
             mean, log_std = self.pi(s)
-            log_pi_a = self.get_log_prob(mean, log_std, a)
+            try:
+                log_pi_a = self.get_log_prob(mean, log_std, a)
+            except:
+                print(s, a)
+                print(mean, log_std)
             # pi = self.pi(s, softmax_dim=1)
             # pi_a = pi.gather(1,a)
             ratio = torch.exp(log_pi_a - torch.log(prob_a))  # a/b == exp(log(a)-log(b))

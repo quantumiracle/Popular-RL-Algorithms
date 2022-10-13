@@ -80,12 +80,17 @@ class PolicyNetwork(nn.Module):
         
         return probs
     
-    def evaluate(self, state, epsilon=1e-6):
+    def evaluate(self, state, epsilon=1e-8):
         '''
         generate sampled action with state as input wrt the policy network;
         '''
         probs = self.forward(state, softmax_dim=-1)
         log_probs = torch.log(probs)
+
+        # Avoid numerical instability. Ref: https://github.com/ku2482/sac-discrete.pytorch/blob/40c9d246621e658750e0a03001325006da57f2d4/sacd/model.py#L98
+        z = (probs == 0.0).float() * epsilon
+        log_probs = torch.log(probs + z)
+
         return log_probs
         
     def get_action(self, state, deterministic):

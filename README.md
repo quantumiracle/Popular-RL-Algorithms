@@ -1,9 +1,23 @@
-# Popular Model-free Reinforcement Learning Algorithms  [![Tweet](https://img.shields.io/twitter/url/http/shields.io.svg?style=social)](https://twitter.com/intent/tweet?text=State-of-the-art-Model-free-Reinforcement-Learning-Algorithms%20&url=hhttps://github.com/quantumiracle/STOA-RL-Algorithms&hashtags=RL)
+# Popular Model-free Reinforcement Learning Algorithms  
+<!-- [![Tweet](https://img.shields.io/twitter/url/http/shields.io.svg?style=social)](https://twitter.com/intent/tweet?text=State-of-the-art-Model-free-Reinforcement-Learning-Algorithms%20&url=hhttps://github.com/quantumiracle/STOA-RL-Algorithms&hashtags=RL) -->
 
 
 **PyTorch** and **Tensorflow 2.0** implementation of state-of-the-art model-free reinforcement learning algorithms on both Openai gym environments and a self-implemented Reacher environment. 
 
-Algorithms include **Soft Actor-Critic (SAC), Deep Deterministic Policy Gradient (DDPG), Twin Delayed DDPG (TD3), Actor-Critic (AC/A2C), Proximal Policy Optimization (PPO), QT-Opt (including Cross-entropy (CE) Method)**, **PointNet**, **Transporter**, **Recurrent Policy Gradient**, **Soft Decision Tree**, **Probabilistic Mixture-of-Experts**, etc.
+Algorithms include:
+* **Actor-Critic (AC/A2C)**;
+* **Soft Actor-Critic (SAC)**;
+* **Deep Deterministic Policy Gradient (DDPG)**;
+* **Twin Delayed DDPG (TD3)**; 
+* **Proximal Policy Optimization (PPO)**;
+* **QT-Opt (including Cross-entropy (CE) Method)**;
+* **PointNet**;
+* **Transporter**;
+* **Recurrent Policy Gradient**;
+* **Soft Decision Tree**;
+* **Probabilistic Mixture-of-Experts**;
+* **QMIX**
+* etc.
 
 Please note that this repo is more of a personal collection of algorithms I implemented and tested during my research and study period, rather than an official open-source library/package for usage. However, I think it could be helpful to share it with others and I'm expecting useful discussions on my implementations. But I didn't spend much time on cleaning or structuring the code. As you may notice that there may be several versions of implementation for each algorithm, I intentionally show all of them here for you to refer and compare. Also, this repo contains only **PyTorch** Implementation.
 
@@ -12,6 +26,9 @@ For official libraries of RL algorithms, I provided the following two with **Ten
 * [**RL Tutorial**](https://github.com/tensorlayer/tensorlayer/tree/reinforcement-learning/examples/reinforcement_learning) (*Status: Released*) contains RL algorithms implementation as tutorials with simple structures. 
 
 * [**RLzoo**](https://github.com/tensorlayer/RLzoo) (*Status: Released*) is a baseline implementation with high-level API supporting a variety of popular environments, with more hierarchical structures for simple usage.
+
+For multi-agent RL, a new repository is built (**PyTorch**):
+* [**MARS**](https://github.com/quantumiracle/MARS) (*Status: WIP*) is a library for multi-agent RL on games, like PettingZoo Atari, SlimeVolleyBall, etc.
 
 Since Tensorflow 2.0 has already incorporated the dynamic graph construction instead of the static one, it becomes a trivial work to transfer the RL code between TensorFlow and PyTorch.
 
@@ -118,6 +135,13 @@ Since Tensorflow 2.0 has already incorporated the dynamic graph construction ins
      `qmix.py`: a fully cooperative multi-agent RL algorithm, demo environment using [pettingzoo](https://www.pettingzoo.ml/atari/entombed_cooperative).
 
      paper: http://proceedings.mlr.press/v80/rashid18a.html
+     
+ * **Phasic Policy Gradient (PPG)**:
+
+   todo
+
+   paper: [Phasic Policy Gradient](http://proceedings.mlr.press/v139/cobbe21a.html)
+     
  
  * **Maximum a Posteriori Policy Optimisation (MPO)**:
  
@@ -152,7 +176,11 @@ As we all known, there are various tricks in empirical RL algorithm implementati
  * Normalization:
     * [Reward normalization](https://github.com/quantumiracle/Popular-RL-Algorithms/blob/7f2bb74a51cf9cbde92a6ccfa42e97dc129dd145/sac_v2.py#L262) or [advantage normalization](https://github.com/quantumiracle/Popular-RL-Algorithms/blob/881903e4aa22921f142daedfcf3dd266488405d8/ppo_gae_discrete.py#L79) in batch can have great improvements on performance (learning efficiency, stability) sometimes, although theoretically on-policy algorithms like PPO should not apply data normalization during training due to distribution shift. For an in-depth look at this problem, we should treat it differently (1) when normalizing the direct input data like observation, action, reward, etc; (2) when normalizing the estimation of the values (state value, state-action value, advantage, etc). For (1), a more reasonable way for normalization is to keep a moving average of previous mean and standard deviation, to achieve a similar effect as conducting the normaliztation on the full dataset during RL agent learning (this is not possible since in RL the data comes from interaction of agents and environments). For (2), we can simply conduct normalization on value estimations (rather than keeping the historical average) since we do not want the estimated values to have distribution shift, so we treat them like a static distribution.
 
-* Although I provide the multiprocessing versions of serveral algorithms ([SAC](https://github.com/quantumiracle/Popular-RL-Algorithms/blob/master/sac_v2_multiprocess.py), [PPO](https://github.com/quantumiracle/Popular-RL-Algorithms/blob/master/ppo_continuous_multiprocess2.py), etc), for small-scale environments in Gym, this is usually not necessary or even inefficient. The vectorized environment wrapper for parallel environment sampling may be more proper solution for learning these environments, since the bottelneck in learning efficiency mainly lies in the interaction with environments rather than the model learning (back-propagation) process.
+* Multiprocessing:
+    * Is the multiprocessing update based on `torch.multiprocessing` the right/safe way to parallelize the code? 
+ It can be seen that the official instruction (example of Hogwild) of using `torch.multiprocessing` is applied without any explicit locks, which means it can be potentially unsafe when multiple processes generate gradients and update the shared model at the same time. See more discussions [here](https://discuss.pytorch.org/t/synchronization-for-sharing-updating-shared-model-state-dict-across-multi-process/50102/2) and some [tests](https://discuss.pytorch.org/t/model-update-with-share-memory-need-lock-protection/72857) and [answers](https://discuss.pytorch.org/t/grad-sharing-problem-in-a3c/10635). In general, the drawback of unsafe updates may be overwhelmed by the speed up of using multiprocessing (also RL training itself has huge variances and noise).
+
+   * Although I provide the multiprocessing versions of serveral algorithms ([SAC](https://github.com/quantumiracle/Popular-RL-Algorithms/blob/master/sac_v2_multiprocess.py), [PPO](https://github.com/quantumiracle/Popular-RL-Algorithms/blob/master/ppo_continuous_multiprocess2.py), etc), for small-scale environments in Gym, this is usually not necessary or even inefficient. The vectorized environment wrapper for parallel environment sampling may be more proper solution for learning these environments, since the bottelneck in learning efficiency mainly lies in the interaction with environments rather than the model learning (back-propagation) process.
 
 More discussions about **implementation tricks** see this [chapter](https://link.springer.com/chapter/10.1007/978-981-15-4095-0_18) in our book.
 

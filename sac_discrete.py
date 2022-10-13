@@ -106,12 +106,17 @@ class PolicyNetwork(nn.Module):
         
         return probs
     
-    def evaluate(self, state, epsilon=1e-6):
+    def evaluate(self, state, epsilon=1e-8):
         '''
         generate sampled action with state as input wrt the policy network;
         '''
         probs = self.forward(state, softmax_dim=-1)
         log_probs = torch.log(probs)
+
+        # Avoid numerical instability. Ref: https://github.com/ku2482/sac-discrete.pytorch/blob/40c9d246621e658750e0a03001325006da57f2d4/sacd/model.py#L98
+        z = (probs == 0.0).float() * epsilon
+        log_probs = torch.log(probs + z)
+
         return log_probs
         
     def get_action(self, state, deterministic):
@@ -171,7 +176,8 @@ class SAC_Trainer():
         predicted_q_value2 = self.soft_q_net2(state)
         predicted_q_value2 = predicted_q_value2.gather(1, action.unsqueeze(-1))
         log_prob = self.policy_net.evaluate(state)
-        next_log_prob = self.policy_net.evaluate(next_state)
+        with torch.no_grad():
+            next_log_prob = self.policy_net.evaluate(next_state)
         # reward = reward_scale * (reward - reward.mean(dim=0)) / (reward.std(dim=0) + 1e-6) # normalize with batch mean and std; plus a small number to prevent numerical problem
 
     # Training Q Function
@@ -189,9 +195,10 @@ class SAC_Trainer():
         self.soft_q_optimizer2.step()  
 
     # Training Policy Function
-        predicted_new_q_value = torch.min(self.soft_q_net1(state),self.soft_q_net2(state))
+        with torch.no_grad():
+            predicted_new_q_value = torch.min(self.soft_q_net1(state),self.soft_q_net2(state))
         policy_loss = (log_prob.exp()*(self.alpha * log_prob - predicted_new_q_value)).sum(dim=-1).mean()
-
+        
         self.policy_optimizer.zero_grad()
         policy_loss.backward()
         self.policy_optimizer.step()

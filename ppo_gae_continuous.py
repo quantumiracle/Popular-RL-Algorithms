@@ -140,7 +140,6 @@ class PPO(nn.Module):
             # pi = self.pi(s, softmax_dim=1)
             # pi_a = pi.gather(1,a)
             ratio = torch.exp(log_pi_a - torch.log(prob_a))  # a/b == exp(log(a)-log(b))
-
             surr1 = ratio * advantage
             surr2 = torch.clamp(ratio, 1-eps_clip, 1+eps_clip) * advantage
             loss = -torch.min(surr1, surr2) + F.smooth_l1_loss(self.v(s) , td_target.detach())
@@ -150,7 +149,8 @@ class PPO(nn.Module):
             self.optimizer.step()
         
 def main():
-    env = gym.make('HalfCheetah-v2')
+    # env = gym.make('HalfCheetah-v2')
+    env = gym.make('Ant-v2')
     state_dim = env.observation_space.shape[0]
     action_dim =  env.action_space.shape[0]
     hidden_dim = 128
@@ -180,7 +180,6 @@ def main():
 
             if done:
                 break
-
         if n_epi%print_interval==0 and n_epi!=0:
             print("# of episode :{}, avg score : {:.1f}".format(n_epi, score/print_interval))
             score = 0.0

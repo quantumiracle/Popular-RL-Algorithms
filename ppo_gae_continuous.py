@@ -12,8 +12,8 @@ learning_rate = 1e-4
 gamma         = 0.99
 lmbda         = 0.95
 eps_clip      = 0.1
-batch_size    = 4096
-K_epoch       = 20
+batch_size    = 1280
+K_epoch       = 10
 T_horizon     = 10000
 
 class NormalizedActions(gym.ActionWrapper):
@@ -50,7 +50,7 @@ class PPO(nn.Module):
 
         self.mean_linear = nn.Linear(hidden_size, num_actions)      
         self.log_std_linear = nn.Linear(hidden_size, num_actions)
-        # self.log_std_param = nn.Parameter(torch.zeros(num_actions))
+        # self.log_std_param = nn.Parameter(torch.zeros(num_actions, requires_grad=True))
 
         self.v_linear = nn.Linear(hidden_size, 1)
 

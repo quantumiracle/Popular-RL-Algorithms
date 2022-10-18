@@ -1,3 +1,9 @@
+###
+# Similar as ppo_gae_continous.py, but change the update function
+# to follow the stablebaseline PPO2 (https://stable-baselines.readthedocs.io/en/master/_modules/stable_baselines/ppo2/ppo2.html#PPO2) and cleanrl (https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/ppo_continuous_action.py)
+# it track value of state during sample collection and thus save computation.
+###
+
 import gym
 import torch
 import torch.nn as nn
@@ -98,8 +104,8 @@ class PPO(nn.Module):
         # prob = log_prob.exp()
 
         action = self.action_range*action # scale the action
-
-        return action.detach().numpy(), prob
+        value =  self.v(x).detach().numpy()
+        return action.detach().numpy(), prob, value
 
     def get_log_prob(self, mean, log_std, action):
         action = action/self.action_range
@@ -111,44 +117,42 @@ class PPO(nn.Module):
         self.data.append(transition)
         
     def make_batch(self):
-        s_lst, a_lst, r_lst, s_prime_lst, prob_a_lst, done_lst = [], [], [], [], [], []
+        s_lst, a_lst, r_lst, s_prime_lst, prob_a_lst, value_lst, done_lst = [], [], [], [], [], [], []
         for transition in self.data:
-            s, a, r, s_prime, prob_a, done = transition
+            s, a, r, s_prime, prob_a, v, done = transition
             
             s_lst.append(s)
             a_lst.append(a)
             r_lst.append([r])
             s_prime_lst.append(s_prime)
             prob_a_lst.append([prob_a])
+            value_lst.append([v])
             done_mask = 0 if done else 1
             done_lst.append([done_mask])
-        s,a,r,s_prime,done_mask, prob_a = torch.tensor(s_lst, dtype=torch.float), torch.tensor(a_lst), \
+        s,a,r,s_prime,v,done_mask,prob_a = torch.tensor(s_lst, dtype=torch.float), torch.tensor(a_lst), \
                                           torch.tensor(r_lst, dtype=torch.float), torch.tensor(s_prime_lst, dtype=torch.float), \
-                                          torch.tensor(done_lst, dtype=torch.float), torch.tensor(prob_a_lst)
+                                           torch.tensor(value_lst), torch.tensor(done_lst, dtype=torch.float), torch.tensor(prob_a_lst)
         self.data = []
-        return s, a, r, s_prime, done_mask, prob_a
+        return s, a, r, s_prime, done_mask, prob_a, v
         
     def train_net(self):
-        s, a, r, s_prime, done_mask, prob_a = self.make_batch()
+        s, a, r, s_prime, done_mask, prob_a, v = self.make_batch()
         done_mask_ = torch.flip(done_mask, dims=(0,))
+        with torch.no_grad():
+            advantage = torch.zeros_like(r)
+            lastgaelam = 0
+            for t in reversed(range(s.shape[0]-1)):
+                if done_mask[t+1]:
+                    nextvalues = self.v(s[t+1])
+                else:
+                    nextvalues = v[t+1]
+                delta = r[t] + gamma * nextvalues * done_mask_[t+1] - v[t]
+                advantage[t] = lastgaelam = delta + gamma * lmbda * lastgaelam * done_mask_[t+1]
 
-        # put target value computation before epoch update reduce computation and stabilize training
-        td_target = r + gamma * self.v(s_prime) * done_mask
-        delta = td_target - self.v(s)
-        delta = delta.detach().numpy()
+            if not np.isnan(advantage.std()):
+                advantage = (advantage - advantage.mean()) / (advantage.std() + 1e-8) 
 
-        advantage_lst = []
-        advantage = 0.0
-        for delta_t, mask in zip(delta[::-1], done_mask_):
-            advantage = gamma * lmbda * advantage * mask + delta_t[0]
-            advantage_lst.append([advantage])
-        advantage_lst.reverse()
-        advantage = torch.tensor(advantage_lst, dtype=torch.float)
-
-        if not np.isnan(advantage.std()):
-            advantage = (advantage - advantage.mean()) / (advantage.std() + 1e-8) 
-
-        # td_target = advantage + self.v(s)
+            td_target = advantage + self.v(s)
 
         for i in range(K_epoch):            
             mean, log_std = self.pi(s)
@@ -181,12 +185,12 @@ def main():
         # while not done:
         for t in range(T_horizon):
             step += 1
-            a, prob = model.get_action(torch.from_numpy(s).float())
+            a, prob, v = model.get_action(torch.from_numpy(s).float())
             s_prime, r, done, info = env.step(a)
             # print(a)
             # env.render()
 
-            model.put_data((s, a, r, s_prime, prob, done))
+            model.put_data((s, a, r, s_prime, prob, v, done))
             s = s_prime
 
             score += r

@@ -41,45 +41,6 @@ class NormalizedActions(gym.ActionWrapper):
         
         return action
 
-def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
-    torch.nn.init.orthogonal_(layer.weight, std)
-    torch.nn.init.constant_(layer.bias, bias_const)
-    return layer
-
-# class PPO(nn.Module):
-#     def __init__(self, num_inputs, num_actions, hidden_size, action_range = 1.):
-#         super(PPO, self).__init__()
-#         self.data = []
-#         self.action_range = action_range
-#         self.v_linear = nn.Sequential(
-#             layer_init(nn.Linear(num_inputs, 64)),
-#             nn.Tanh(),
-#             layer_init(nn.Linear(64, 64)),
-#             nn.Tanh(),
-#             layer_init(nn.Linear(64, 1), std=1.0),
-#         )
-#         self.mean_linear = nn.Sequential(
-#             layer_init(nn.Linear(num_inputs, 64)),
-#             nn.Tanh(),
-#             layer_init(nn.Linear(64, 64)),
-#             nn.Tanh(),
-#             layer_init(nn.Linear(64, num_actions), std=0.01),
-#         )
-#         self.log_std_param = nn.Parameter(torch.zeros(num_actions))
-
-#         self.optimizer = optim.Adam(self.parameters(), lr=learning_rate)
-    
-#     def pi(self, x):
-#         mean    = self.mean_linear(x)
-#         # log_std = self.log_std_linear(x)
-#         log_std = self.log_std_param.expand_as(mean)
-
-#         return mean, log_std
-
-#     def v(self, x):   
-#         v = self.v_linear(x)
-#         return v
-
 class PPO(nn.Module):
     def __init__(self, num_inputs, num_actions, hidden_size, action_range = 1.):
         super(PPO, self).__init__()

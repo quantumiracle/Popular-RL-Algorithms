@@ -166,8 +166,7 @@ class PPO(nn.Module):
             s_prime_lst.append(s_prime)
             prob_a_lst.append([prob_a])
             value_lst.append(v)
-            done_mask = 0 if done else 1
-            done_lst.append([done_mask])
+            done_lst.append([done])
         s,a,r,s_prime,v,done_mask,prob_a = torch.tensor(s_lst, dtype=torch.float), torch.tensor(a_lst), \
                                           torch.tensor(r_lst, dtype=torch.float), torch.tensor(s_prime_lst, dtype=torch.float), \
                                            torch.tensor(value_lst), torch.tensor(done_lst, dtype=torch.float), torch.tensor(prob_a_lst)
@@ -176,20 +175,21 @@ class PPO(nn.Module):
         
     def train_net(self):
         s, a, r, s_prime, done_mask, prob_a, v = self.make_batch()
-        done_mask_ = torch.flip(done_mask, dims=(0,))
         with torch.no_grad():
             advantage = torch.zeros_like(r)
             lastgaelam = 0
-            for t in reversed(range(s.shape[0]-1)):
-                if done_mask[t+1]:
-                    nextvalues = self.v(s[t+1])
+
+            for t in reversed(range(s.shape[0])):
+                if done_mask[t] or t == s.shape[0]-1:
+                    nextvalues = self.v(s_prime[t])
                 else:
                     nextvalues = v[t+1]
-                delta = r[t] + gamma * nextvalues * done_mask_[t+1] - v[t]
-                advantage[t] = lastgaelam = delta + gamma * lmbda * lastgaelam * done_mask_[t+1]
+                delta = r[t] + gamma * nextvalues - v[t]
+                advantage[t] = lastgaelam = delta + gamma * lmbda * lastgaelam
 
             if not np.isnan(advantage.std()):
                 advantage = (advantage - advantage.mean()) / (advantage.std() + 1e-8) 
+            assert advantage.shape == v.shape
             td_target = advantage + v
 
         for i in range(K_epoch):            

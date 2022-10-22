@@ -60,8 +60,8 @@ class PPO(nn.Module):
 
         x = F.tanh(self.linear1(x))
         x = F.tanh(self.linear2(x))
-        x1 = F.tanh(self.linear3(x).detach()) # std learning not BP to the feature
-        x2 = F.tanh(self.linear4(x))
+        x1 = F.tanh(self.linear3(x)) 
+        x2 = F.tanh(self.linear4(x.detach())) # std learning not BP to the feature
 
         mean    = F.tanh(self.mean_linear(x1))
         log_std = self.log_std_linear(x2)
@@ -169,7 +169,7 @@ def main():
     env = gym.make('Ant-v2')
     state_dim = env.observation_space.shape[0]
     action_dim =  env.action_space.shape[0]
-    hidden_dim = 128
+    hidden_dim = 64
     model = PPO(state_dim, action_dim, hidden_dim)
     score = 0.0
     print_interval = 2

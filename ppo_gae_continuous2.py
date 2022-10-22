@@ -41,6 +41,45 @@ class NormalizedActions(gym.ActionWrapper):
         
         return action
 
+def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
+    torch.nn.init.orthogonal_(layer.weight, std)
+    torch.nn.init.constant_(layer.bias, bias_const)
+    return layer
+
+# class PPO(nn.Module):
+#     def __init__(self, num_inputs, num_actions, hidden_size, action_range = 1.):
+#         super(PPO, self).__init__()
+#         self.data = []
+#         self.action_range = action_range
+#         self.v_linear = nn.Sequential(
+#             layer_init(nn.Linear(num_inputs, 64)),
+#             nn.Tanh(),
+#             layer_init(nn.Linear(64, 64)),
+#             nn.Tanh(),
+#             layer_init(nn.Linear(64, 1), std=1.0),
+#         )
+#         self.mean_linear = nn.Sequential(
+#             layer_init(nn.Linear(num_inputs, 64)),
+#             nn.Tanh(),
+#             layer_init(nn.Linear(64, 64)),
+#             nn.Tanh(),
+#             layer_init(nn.Linear(64, num_actions), std=0.01),
+#         )
+#         self.log_std_param = nn.Parameter(torch.zeros(num_actions))
+
+#         self.optimizer = optim.Adam(self.parameters(), lr=learning_rate)
+    
+#     def pi(self, x):
+#         mean    = self.mean_linear(x)
+#         # log_std = self.log_std_linear(x)
+#         log_std = self.log_std_param.expand_as(mean)
+
+#         return mean, log_std
+
+#     def v(self, x):   
+#         v = self.v_linear(x)
+#         return v
+
 class PPO(nn.Module):
     def __init__(self, num_inputs, num_actions, hidden_size, action_range = 1.):
         super(PPO, self).__init__()
@@ -66,8 +105,8 @@ class PPO(nn.Module):
 
         x = F.tanh(self.linear1(x))
         x = F.tanh(self.linear2(x))
-        x1 = F.tanh(self.linear3(x).detach()) # std learning not BP to the feature
-        x2 = F.tanh(self.linear4(x))
+        x1 = F.tanh(self.linear3(x))
+        x2 = F.tanh(self.linear4(x.detach()))   # std learning not BP to the feature
 
         mean    = F.tanh(self.mean_linear(x1))
         log_std = self.log_std_linear(x2)
@@ -126,7 +165,7 @@ class PPO(nn.Module):
             r_lst.append([r])
             s_prime_lst.append(s_prime)
             prob_a_lst.append([prob_a])
-            value_lst.append([v])
+            value_lst.append(v)
             done_mask = 0 if done else 1
             done_lst.append([done_mask])
         s,a,r,s_prime,v,done_mask,prob_a = torch.tensor(s_lst, dtype=torch.float), torch.tensor(a_lst), \
@@ -151,8 +190,7 @@ class PPO(nn.Module):
 
             if not np.isnan(advantage.std()):
                 advantage = (advantage - advantage.mean()) / (advantage.std() + 1e-8) 
-
-            td_target = advantage + self.v(s)
+            td_target = advantage + v
 
         for i in range(K_epoch):            
             mean, log_std = self.pi(s)
@@ -173,15 +211,23 @@ def main():
     env = gym.make('Ant-v2')
     state_dim = env.observation_space.shape[0]
     action_dim =  env.action_space.shape[0]
-    hidden_dim = 128
+    hidden_dim = 64
     model = PPO(state_dim, action_dim, hidden_dim)
     score = 0.0
     print_interval = 2
     step = 0
+    update = 0
+    n_epis = 10000
 
-    for n_epi in range(10000):
+    for n_epi in range(n_epis):
         s = env.reset()
         done = False
+
+        ## learning rate schedule
+        # frac = 1.0 - (n_epi - 1.0) / n_epis
+        # lrnow = frac * learning_rate
+        # model.optimizer.param_groups[0]["lr"] = lrnow
+
         # while not done:
         for t in range(T_horizon):
             step += 1
@@ -197,9 +243,11 @@ def main():
 
             if (step+1) % batch_size == 0:
                 model.train_net()
+                update += 1
 
             if done:
                 break
+
         if n_epi%print_interval==0 and n_epi!=0:
             print("# of episode :{}, avg score : {:.1f}".format(n_epi, score/print_interval))
             score = 0.0

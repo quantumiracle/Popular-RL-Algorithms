@@ -182,6 +182,10 @@ As we all known, there are various tricks in empirical RL algorithm implementati
 
    * Although I provide the multiprocessing versions of serveral algorithms ([SAC](https://github.com/quantumiracle/Popular-RL-Algorithms/blob/master/sac_v2_multiprocess.py), [PPO](https://github.com/quantumiracle/Popular-RL-Algorithms/blob/master/ppo_continuous_multiprocess2.py), etc), for small-scale environments in Gym, this is usually not necessary or even inefficient. The vectorized environment wrapper for parallel environment sampling may be more proper solution for learning these environments, since the bottelneck in learning efficiency mainly lies in the interaction with environments rather than the model learning (back-propagation) process.
 
+* PPO Details:
+
+    * [Here](https://docs.google.com/document/d/19VucQYtiCubFt6IIfzO-Gsguvs8BfnXTxp76RXUPDNA/edit?usp=sharing) I summarized a list of implementation details for PPO algorithm on continous action spaces, correspoonding to scripts `ppo_gae_continuous.py`, `ppo_gae_continuous2.py` and `ppo_gae_continuous3.py`.
+
 More discussions about **implementation tricks** see this [chapter](https://link.springer.com/chapter/10.1007/978-981-15-4095-0_18) in our book.
 
 ## Performance:

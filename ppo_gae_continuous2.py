@@ -14,7 +14,7 @@ from torch.distributions import Normal
 import numpy as np
 
 #Hyperparameters
-learning_rate = 1e-4
+learning_rate = 3e-4
 gamma         = 0.99
 lmbda         = 0.95
 eps_clip      = 0.1
@@ -55,8 +55,8 @@ class PPO(nn.Module):
         self.linear6 = nn.Linear(hidden_size, hidden_size)
 
         self.mean_linear = nn.Linear(hidden_size, num_actions)      
-        self.log_std_linear = nn.Linear(hidden_size, num_actions)
-        # self.log_std_param = nn.Parameter(torch.zeros(num_actions, requires_grad=True))
+        # self.log_std_linear = nn.Linear(hidden_size, num_actions)
+        self.log_std_param = nn.Parameter(torch.zeros(num_actions, requires_grad=True))
 
         self.v_linear = nn.Linear(hidden_size, 1)
 
@@ -70,8 +70,8 @@ class PPO(nn.Module):
         x2 = F.tanh(self.linear4(x.detach()))   # std learning not BP to the feature
 
         mean    = F.tanh(self.mean_linear(x1))
-        log_std = self.log_std_linear(x2)
-        # log_std = self.log_std_param.expand_as(mean)
+        # log_std = self.log_std_linear(x2)
+        log_std = self.log_std_param.expand_as(mean)
 
         return mean, log_std
     
@@ -145,8 +145,8 @@ class PPO(nn.Module):
                     nextvalues = self.v(s_prime[t])
                 else:
                     nextvalues = v[t+1]
-                delta = r[t] + gamma * nextvalues - v[t]
-                advantage[t] = lastgaelam = delta + gamma * lmbda * lastgaelam
+                delta = r[t] + gamma * nextvalues * (1-done_mask[t]) - v[t]
+                advantage[t] = lastgaelam = delta + gamma * lmbda * lastgaelam * (1-done_mask[t])
 
             if not np.isnan(advantage.std()):
                 advantage = (advantage - advantage.mean()) / (advantage.std() + 1e-8) 
@@ -156,8 +156,6 @@ class PPO(nn.Module):
         for i in range(K_epoch):            
             mean, log_std = self.pi(s)
             log_pi_a = self.get_log_prob(mean, log_std, a)
-            # pi = self.pi(s, softmax_dim=1)
-            # pi_a = pi.gather(1,a)
             ratio = torch.exp(log_pi_a - torch.log(prob_a))  # a/b == exp(log(a)-log(b))
             surr1 = ratio * advantage
             surr2 = torch.clamp(ratio, 1-eps_clip, 1+eps_clip) * advantage
@@ -169,7 +167,14 @@ class PPO(nn.Module):
         
 def main():
     # env = gym.make('HalfCheetah-v2')
-    env = gym.make('Ant-v2')
+    # env = gym.make('Ant-v2')
+    env = gym.make('Hopper-v2')
+    env = gym.wrappers.RecordEpisodeStatistics(env)  # bypass the reward normalization to record episodic return
+    env = gym.wrappers.ClipAction(env)
+    env = gym.wrappers.NormalizeObservation(env) 
+    env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10))
+    env = gym.wrappers.NormalizeReward(env)
+    env = gym.wrappers.TransformReward(env, lambda reward: np.clip(reward, -10, 10))
     state_dim = env.observation_space.shape[0]
     action_dim =  env.action_space.shape[0]
     hidden_dim = 64
@@ -208,9 +213,11 @@ def main():
 
             if done:
                 break
-
+        if 'episode' in info.keys():
+            print(f"Global steps: {step}, score: {info['episode']['r']}")
+        
         if n_epi%print_interval==0 and n_epi!=0:
-            print("# of episode :{}, avg score : {:.1f}".format(n_epi, score/print_interval))
+            # print("# of episode :{}, avg score : {:.1f}".format(n_epi, score/print_interval))
             score = 0.0
 
     env.close()

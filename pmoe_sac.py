@@ -4,6 +4,7 @@ paper: https://arxiv.org/abs/2104.09122
 
 Core features:
 It replaces the diagonal Gaussian distribution with (differentiable) Gaussian mixture model for policy function approximation, which is more expressive.
+This version is based on off-policy SAC algorithm.
 '''
 
 import argparse

@@ -1,6 +1,11 @@
-###
-# Compared with ppo_gae_continuous2, using minibatch SGD, separate actor and critic networks.
-###
+'''
+Probabilistic Mixture-of-Experts
+paper: https://arxiv.org/abs/2104.09122
+
+Core features:
+It replaces the diagonal Gaussian distribution with (differentiable) Gaussian mixture model for policy function approximation, which is more expressive.
+This version is based on on-policy PPO algorithm.
+'''
 
 import gym
 import torch
@@ -134,18 +139,28 @@ class PMOE_PPO():
         mean, log_std, mix_coef = self.pi(x)
         std = torch.exp(log_std)
         normal = Normal(mean, std)
+        
+        full_action = normal.sample()
+        if select_from_mixture:
+            mix_dist = Categorical(mix_coef)
+            index = mix_dist.sample()
+            a = full_action[index]
+        else:
+            a = full_action
+
         if action is None:
-            full_action = normal.sample()
-            if select_from_mixture:
-                index = Categorical(mix_coef).sample()
-                action = full_action[index]
-        # log_prob = normal.log_prob(full_action).sum((-1, -2))  # TODO prob of other entries?
-        log_prob = normal.log_prob(action).sum(-1)  # TODO prob of other entries?
+            a_for_prob = a.unsqueeze(-2)  # to (1, action_dim), matching with mean and std (K, action_dim)
+            log_prob = (mix_coef @ normal.log_prob(a_for_prob).sum(-1).exp()).log()
+        else: # work for batch
+            a_for_prob = action.unsqueeze(-2) # use given action for calculating probability
+            log_prob = torch.einsum('ij,ij->i', mix_coef, normal.log_prob(a_for_prob).sum(-1).exp()).log()   # prob of action from the whole GMM, including the mixing
+        a_for_prob = a_for_prob
+            
         value =  self.v(x)
         if track_grad:
-            return action, log_prob, value, mix_coef
+            return a, log_prob, value, mix_coef
         else:
-            return action.cpu().numpy(), log_prob, value, mix_coef
+            return a.cpu().numpy(), log_prob, value, mix_coef
 
     def put_data(self, transition):
         self.data.append(transition)
@@ -159,6 +174,7 @@ class PMOE_PPO():
         
     def train_net(self):
         s, a, r, s_prime, done_mask, logprob_a, v = self.make_batch()
+        loss_list = []
         with torch.no_grad():
             advantage = torch.zeros_like(r).to(device)
             lastgaelam = 0
@@ -189,20 +205,19 @@ class PMOE_PPO():
                 # get mixing coefficients loss
                 new_a, newlogprob_a, new_vs, new_mix_coef = self.get_action_and_value(bs, ba, select_from_mixture=False, track_grad=True)
                 new_q = self.q_net(bs, new_a, match_shape=True)
-                _, best_index = new_q.max(1)
-                print(new_q.shape, best_index.shape, new_mix_coef.shape)
-                coef_loss = F.mse_loss(new_mix_coef, F.one_hot(best_index, self.mix_num).float())
+                _, best_index = new_q.max(-1)
+                coef_loss = F.mse_loss(new_mix_coef, F.one_hot(best_index, self.mix_num).float()).mean()
 
                 # Q-net loss
-                pred_q = self.q_net(bs, ba)
-                q_loss = F.mse_loss(pred_q, btd_target)
-
+                pred_q = self.q_net(bs, ba).squeeze()
+                q_loss = F.mse_loss(pred_q, btd_target).mean()
 
                 new_vs = new_vs.reshape(-1)
                 ratio = torch.exp(newlogprob_a - blogprob_a)  # a/b == exp(log(a)-log(b))
                 surr1 = -ratio * badvantage
                 surr2 = -torch.clamp(ratio, 1-eps_clip, 1+eps_clip) * badvantage
                 policy_loss = torch.max(surr1, surr2).mean()
+                # import pdb; pdb.set_trace()
 
                 if self.v_loss_clip: # clipped value loss
                     v_clipped = bv + torch.clamp(new_vs - bv, -eps_clip, eps_clip)
@@ -218,6 +233,8 @@ class PMOE_PPO():
                 loss.backward()
                 nn.utils.clip_grad_norm_(self.parameters, self.max_grad_norm)
                 self.optimizer.step()
+        loss_list = [coef_loss.item(), q_loss.item(), policy_loss.item(), value_loss.item()]
+        return loss_list
         
 def main():
     args = parse_args()
@@ -234,6 +251,7 @@ def main():
     env.seed(seed)
     env.action_space.seed(seed)
     env.observation_space.seed(seed)
+    print(env.observation_space, env.action_space)
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -241,11 +259,13 @@ def main():
     state_dim = env.observation_space.shape[0]
     action_dim =  env.action_space.shape[0]
     hidden_dim = 64
-    model = PMOE_PPO(state_dim, action_dim, hidden_dim)
+    mix_num = 5 # number of experts
+    model = PMOE_PPO(state_dim, action_dim, hidden_dim, mix_num)
     score = 0.0
     print_interval = 1
     step = 0
     update = 1
+    loss_list = []
 
     if args.wandb_activate:
         wandb.init(
@@ -277,12 +297,13 @@ def main():
             # env.render()
 
             model.put_data((s, a, r, s_prime, logprob, v.squeeze(-1), done))
+
             s = s_prime
 
             score += r
 
             if step % batch_size == 0 and step > 0:
-                model.train_net()
+                loss_list = model.train_net()
                 update += 1
                 eff_update = update
                 
@@ -298,6 +319,12 @@ def main():
             writer.add_scalar("charts/episodic_return", epi_r, n_epi)
             writer.add_scalar("charts/episodic_length", t, n_epi)
             writer.add_scalar("charts/update", update, n_epi)
+            writer.add_scalar("charts/", update, n_epi)
+            if len(loss_list) > 0:
+                writer.add_scalar("charts/coeff_loss", loss_list[0], n_epi)
+                writer.add_scalar("charts/Q_loss", loss_list[1], n_epi)
+                writer.add_scalar("charts/policy_loss", loss_list[2], n_epi)
+                writer.add_scalar("charts/value_loss", loss_list[3], n_epi)
 
             score = 0.0
 

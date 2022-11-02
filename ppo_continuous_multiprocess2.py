@@ -71,6 +71,7 @@ args = parser.parse_args()
 #####################  hyper parameters  ####################
 
 ENV_NAME = 'LunarLanderContinuous-v2'  # environment name: LunarLander-v2, Pendulum-v0
+
 RANDOMSEED = 2  # random seed
 
 EP_MAX = 1000  # total number of episodes for training

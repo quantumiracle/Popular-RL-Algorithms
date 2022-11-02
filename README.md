@@ -124,8 +124,10 @@ Since Tensorflow 2.0 has already incorporated the dynamic graph construction ins
 ](https://arxiv.org/abs/2011.07553)
    
  * **Probabilistic Mixture-of-Experts (PMOE)** :
- 
-   `pmoe.py`: uses a differentiable multi-modal Gaussian distribution to replace the standard unimodal Gaussian distribution for policy representation.
+   PMOE uses a differentiable multi-modal Gaussian distribution to replace the standard unimodal Gaussian distribution for policy representation.
+   `pmoe_sac.py`: based on off-policy SAC.
+   
+   `pmoe_ppo.py`: based on on-policy PPO.
    
    paper: [Probabilistic Mixture-of-Experts for Efficient Deep Reinforcement Learning
 ](https://arxiv.org/pdf/2104.09122)

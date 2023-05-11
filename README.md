@@ -168,7 +168,7 @@ Since Tensorflow 2.0 has already incorporated the dynamic graph construction ins
 
 If you meet problem *"Not imlplemented Error"*, it may be due to the wrong gym version. The newest gym==0.14 won't work. Install gym==0.7 or gym==0.10 with `pip install -r requirements.txt`.
 
-## Undervalued tricks:
+## Undervalued Tricks:
 
 As we all known, there are various tricks in empirical RL algorithm implementations in support the performance in practice, including hyper-parameters, normalization, network architecture or even hidden activation function, etc. I summarize some I met with the programs in this repo here:
 

@@ -233,6 +233,7 @@ class PMOE_PPO():
                 loss.backward()
                 nn.utils.clip_grad_norm_(self.parameters, self.max_grad_norm)
                 self.optimizer.step()
+
         loss_list = [coef_loss.item(), q_loss.item(), policy_loss.item(), value_loss.item()]
         return loss_list
         

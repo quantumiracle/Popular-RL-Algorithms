@@ -185,7 +185,14 @@ As we all known, there are various tricks in empirical RL algorithm implementati
  It can be seen that the official instruction (example of Hogwild) of using `torch.multiprocessing` is applied without any explicit locks, which means it can be potentially unsafe when multiple processes generate gradients and update the shared model at the same time. See more discussions [here](https://discuss.pytorch.org/t/synchronization-for-sharing-updating-shared-model-state-dict-across-multi-process/50102/2) and some [tests](https://discuss.pytorch.org/t/model-update-with-share-memory-need-lock-protection/72857) and [answers](https://discuss.pytorch.org/t/grad-sharing-problem-in-a3c/10635). In general, the drawback of unsafe updates may be overwhelmed by the speed up of using multiprocessing (also RL training itself has huge variances and noise).
 
    * Although I provide the multiprocessing versions of serveral algorithms ([SAC](https://github.com/quantumiracle/Popular-RL-Algorithms/blob/master/sac_v2_multiprocess.py), [PPO](https://github.com/quantumiracle/Popular-RL-Algorithms/blob/master/ppo_continuous_multiprocess2.py), etc), for small-scale environments in Gym, this is usually not necessary or even inefficient. The vectorized environment wrapper for parallel environment sampling may be more proper solution for learning these environments, since the bottelneck in learning efficiency mainly lies in the interaction with environments rather than the model learning (back-propagation) process.
-
+   * A quick note on multiprocess usage:
+      <p align="center">
+      <img src="https://github.com/quantumiracle/STOA-RL-Algorithms/blob/master/img/mp.png" width="40%">
+      </p>
+      Sharing class instance with its states across multiple processes requires to put the instance inside multiprocessing.manager:
+      <p align="center">
+      <img src="https://github.com/quantumiracle/STOA-RL-Algorithms/blob/master/img/mp_share.png" width="40%">
+      </p>
 * PPO Details:
 
     * [Here](https://docs.google.com/document/d/19VucQYtiCubFt6IIfzO-Gsguvs8BfnXTxp76RXUPDNA/edit?usp=sharing) I summarized a list of implementation details for PPO algorithm on continous action spaces, correspoonding to scripts `ppo_gae_continuous.py`, `ppo_gae_continuous2.py` and `ppo_gae_continuous3.py`.

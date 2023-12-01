@@ -58,7 +58,7 @@ kiwisolver==1.0.1
 Lasagne==0.2.dev1
 lockfile==0.12.2
 lxml==4.2.6
-Mako==1.0.7
+Mako==1.2.2
 Markdown==3.0.1
 MarkupSafe==1.1.0
 matplotlib==3.0.2

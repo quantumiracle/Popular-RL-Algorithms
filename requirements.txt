@@ -57,7 +57,7 @@ Keras-Preprocessing==1.0.5
 kiwisolver==1.0.1
 Lasagne==0.2.dev1
 lockfile==0.12.2
-lxml==4.2.6
+lxml==4.9.1
 Mako==1.0.7
 Markdown==3.0.1
 MarkupSafe==1.1.0

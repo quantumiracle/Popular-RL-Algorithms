@@ -19,7 +19,7 @@ cloudpickle==0.8.1
 colorlog==4.0.2
 cycler==0.10.0
 Cython==0.29.2
-dask==1.1.5
+dask==2021.10.0
 decorator==4.3.2
 defusedxml==0.6.0
 docopt==0.6.2

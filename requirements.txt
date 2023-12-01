@@ -91,7 +91,7 @@ pluggy==0.9.0
 progressbar2==3.38.0
 prometheus-client==0.6.0
 prompt-toolkit==2.0.9
-protobuf==3.9.0
+protobuf==3.18.3
 ptyprocess==0.6.0
 py==1.10.0
 pybullet==2.5.0

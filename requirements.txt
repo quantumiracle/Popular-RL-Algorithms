@@ -69,7 +69,7 @@ more-itertools==7.0.0
 mpi4py==3.0.0
 mujoco-py==1.50.1.68
 multipledispatch==0.6.0
-nbconvert==5.5.0
+nbconvert==6.5.1
 nbformat==4.4.0
 networkx==1.8.1
 nltk==3.4.1

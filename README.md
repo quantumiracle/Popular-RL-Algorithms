@@ -5,6 +5,9 @@
 **PyTorch** and **Tensorflow 2.0** implementation of state-of-the-art model-free reinforcement learning algorithms on both Openai gym environments and a self-implemented Reacher environment. 
 
 Algorithms include:
+* **Q-learning**
+* **SARSA**
+* **Monte-Carlo Regression**
 * **Actor-Critic (AC/A2C)**;
 * **Soft Actor-Critic (SAC)**;
 * **Deep Deterministic Policy Gradient (DDPG)**;
@@ -85,7 +88,11 @@ Since Tensorflow 2.0 has already incorporated the dynamic graph construction ins
   `ac.py`: extensible AC/A2C, easy to change to be DDPG, etc.
 
    A very extensible version of vanilla AC/A2C, supporting for all continuous/discrete deterministic/non-deterministic cases.
-   
+  
+* **Q-learning**, **SARSA**, **Monte-Carlo Regression**:
+
+  `qlearning_sarsa_mc.ipynb`: comparison of the three.
+ 
 * **DQN**:
 
   `dqn.py`: a simple DQN.

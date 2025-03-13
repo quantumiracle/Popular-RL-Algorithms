@@ -5,9 +5,9 @@
 **PyTorch** and **Tensorflow 2.0** implementation of state-of-the-art model-free reinforcement learning algorithms on both Openai gym environments and a self-implemented Reacher environment. 
 
 Algorithms include:
-* **Q-learning**
-* **SARSA**
-* **Monte-Carlo Regression**
+* **Q-learning**;
+* **SARSA**;
+* **Monte-Carlo Regression**;
 * **Actor-Critic (AC/A2C)**;
 * **Soft Actor-Critic (SAC)**;
 * **Deep Deterministic Policy Gradient (DDPG)**;
